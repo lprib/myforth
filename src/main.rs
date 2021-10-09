@@ -1,4 +1,5 @@
 use ast::visitor;
+use codegen::ModuleCodeGen;
 use typecheck::{FunctionMapBuilder, ModuleTypeChecker};
 
 use crate::parser::{module, top_level_item};
@@ -10,14 +11,11 @@ mod codegen;
 
 fn main() {
     let test = "
-    intrinsic fn convert i32 -> f32;
-    intrinsic fn swap0 i32 f32 -> f32 i32;
-    intrinsic fn drop i32 -> ;
-    intrinsic fn dropf f32 -> ;
+    extern fn print i32 -> ;
     intrinsic fn + i32 i32 -> i32;
     
-    fn test -> f32 i32 [
-        2.0 3.0 swap0
+    fn test -> [
+        3 4 + print
     ]
     ";
     let module = module(test).unwrap().1;
@@ -27,4 +25,7 @@ fn main() {
 
     let mut type_checker = ModuleTypeChecker::new(&map_builder.map);
     visitor::walk_module(&mut type_checker, &module);
+    
+    let mut codegen = ModuleCodeGen::new(&map_builder.map);
+    visitor::walk_module(&mut codegen, &module);
 }

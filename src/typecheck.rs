@@ -47,7 +47,7 @@ impl<'a> CodeBlockTypeChecker<'a> {
     }
 }
 
-impl<'a> CodeBlockVisitor for CodeBlockTypeChecker<'a> {
+impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
     fn visit_i32_literal(&mut self, n: i32) {
         self.type_stack.push(Type::Concrete(ConcreteType::I32))
     }
@@ -113,7 +113,7 @@ impl<'a> ModuleTypeChecker<'a> {
     }
 }
 
-impl<'a> ModuleVisitor for ModuleTypeChecker<'a> {
+impl ModuleVisitor for ModuleTypeChecker<'_> {
     fn visit_decl(&mut self, f_decl: &FunctionDecl) {}
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
