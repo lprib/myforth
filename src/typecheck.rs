@@ -5,31 +5,6 @@ use crate::ast::{
     ConcreteType, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type, WhileStatement,
 };
 
-pub struct FunctionMapBuilder {
-    pub map: HashMap<String, FunctionType>,
-}
-
-impl FunctionMapBuilder {
-    pub fn new() -> Self {
-        Self {
-            map: HashMap::new(),
-        }
-    }
-}
-
-impl ModuleVisitor for FunctionMapBuilder {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
-        // TODO no clone implementation (keep refs?)
-        self.map
-            .insert(f_decl.head.name.clone(), f_decl.head.typ.clone());
-    }
-
-    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        self.map
-            .insert(f_impl.head.name.clone(), f_impl.head.typ.clone());
-    }
-}
-
 struct CodeBlockTypeChecker<'a> {
     function_map: &'a HashMap<String, FunctionType>,
     type_stack: Vec<Type>,
@@ -48,11 +23,11 @@ impl<'a> CodeBlockTypeChecker<'a> {
 }
 
 impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
-    fn visit_i32_literal(&mut self, n: i32) {
+    fn visit_i32_literal(&mut self, _: i32) {
         self.type_stack.push(Type::Concrete(ConcreteType::I32))
     }
 
-    fn visit_f32_literal(&mut self, n: f32) {
+    fn visit_f32_literal(&mut self, _: f32) {
         self.type_stack.push(Type::Concrete(ConcreteType::F32))
     }
 
@@ -103,22 +78,28 @@ impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
     }
 }
 
-pub struct ModuleTypeChecker<'a> {
-    function_map: &'a HashMap<String, FunctionType>,
+pub struct ModuleTypeChecker {
+    pub functions: HashMap<String, FunctionType>,
 }
 
-impl<'a> ModuleTypeChecker<'a> {
-    pub fn new(function_map: &'a HashMap<String, FunctionType>) -> Self {
-        Self { function_map }
+impl ModuleTypeChecker {
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+        }
     }
 }
 
-impl ModuleVisitor for ModuleTypeChecker<'_> {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {}
+impl ModuleVisitor for ModuleTypeChecker {
+    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
+        self.functions
+            .insert(f_decl.head.name.clone(), f_decl.head.typ.clone());
+    }
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        let mut type_checker = CodeBlockTypeChecker::new(&f_impl.head.typ, self.function_map);
+        let mut type_checker = CodeBlockTypeChecker::new(&f_impl.head.typ, &self.functions);
         visitor::walk_code_block(&mut type_checker, &f_impl.body);
         println!("Function {} typechecked OK.", f_impl.head.name);
+        self.functions.insert(f_impl.head.name.clone(), f_impl.head.typ.clone());
     }
 }
