@@ -31,18 +31,6 @@ impl<'a> Context<'a> {
         }
     }
 
-    pub(super) unsafe fn get_llvm_zero_val(&mut self, typ: &Type) -> LLVMValueRef {
-        let llvm_typ = self.get_llvm_type(typ);
-        match typ {
-            Type::Concrete(concrete_type) => match concrete_type {
-                ConcreteType::I32 => LLVMConstInt(llvm_typ, 0, false as i32),
-                ConcreteType::F32 => LLVMConstReal(llvm_typ, 0.0),
-            },
-            Type::Generic(_) => todo!(),
-            Type::Pointer(_) => todo!(),
-        }
-    }
-
     pub(super) unsafe fn get_function_type(&mut self, typ: &FunctionType) -> LLVMTypeRef {
         assert!(typ.outputs.len() < 2, "Multiple returns not yet supported");
         let mut param_types = typ
@@ -65,10 +53,13 @@ impl<'a> Context<'a> {
         )
     }
 
-    pub(super) unsafe fn create_function(&mut self, head: &FunctionHeader) -> LLVMValueRef {
+    pub(super) unsafe fn create_function_decl(&mut self, head: &FunctionHeader, is_extern: bool) -> LLVMValueRef {
         let function_type = self.get_function_type(&head.typ);
         let mut function_name = head.name.clone();
         let new_function = LLVMAddFunction(self.module, function_name.c_str(), function_type);
+        if !is_extern {
+            LLVMSetLinkage(new_function, LLVMLinkage::LLVMInternalLinkage);
+        }
         self.generated_functions
             .insert(String::from(&head.name), new_function);
         new_function
@@ -98,8 +89,10 @@ impl<'a> ModuleCodeGen<'a> {
 
 impl<'a> ModuleVisitor for ModuleCodeGen<'a> {
     fn visit_decl(&mut self, f_decl: &FunctionDecl) {
-        unsafe {
-            self.context.create_function(&f_decl.head);
+        if !f_decl.is_intrinsic {
+            unsafe {
+                self.context.create_function_decl(&f_decl.head, f_decl.is_extern);
+            }
         }
     }
 
@@ -124,7 +117,12 @@ struct FunctionCodeGen<'a, 'b> {
 impl<'a, 'b> FunctionCodeGen<'a, 'b> {
     fn new(context: &'a mut Context<'b>, head: &'a FunctionHeader) -> Self {
         unsafe {
-            let function = context.create_function(head);
+            let function = if context.generated_functions.contains_key(&head.name) {
+                context.generated_functions[&head.name]
+            } else {
+                context.create_function_decl(head, false)
+            };
+
             let entry_block =
                 LLVMAppendBasicBlockInContext(context.context, function, "entry\0".c_str());
             LLVMPositionBuilderAtEnd(context.builder, entry_block);
@@ -209,16 +207,26 @@ unsafe fn try_append_intrinsic(
     value_stack: &mut Vec<LLVMValueRef>,
 ) -> bool {
     match name {
-        "+" => {
-            // unwrap should not fail if we have previously typechecked
-            let rhs = value_stack.pop().unwrap();
-            let lhs = value_stack.pop().unwrap();
-            let new = LLVMBuildAdd(context.builder, lhs, rhs, "\0".c_str());
-            value_stack.push(new);
-            true
-        }
+        "+" => binop_intrinsic(LLVMBuildAdd, value_stack, context),
+        "-" => binop_intrinsic(LLVMBuildSub, value_stack, context),
+        "*" => binop_intrinsic(LLVMBuildMul, value_stack, context),
         _ => false,
     }
+}
+
+type LLVMBuildBinopFn =
+    unsafe extern "C" fn(LLVMBuilderRef, LLVMValueRef, LLVMValueRef, *const c_char) -> LLVMValueRef;
+
+unsafe fn binop_intrinsic(
+    f: LLVMBuildBinopFn,
+    value_stack: &mut Vec<LLVMValueRef>,
+    context: &mut Context,
+) -> bool {
+    let rhs = value_stack.pop().unwrap();
+    let lhs = value_stack.pop().unwrap();
+    let new = f(context.builder, lhs, rhs, "\0".c_str());
+    value_stack.push(new);
+    true
 }
 
 trait ToCStr {
