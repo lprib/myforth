@@ -120,8 +120,12 @@ fn generic_type(input: &str) -> PResult<Type> {
     })(input)
 }
 
+fn pointer_type(input: &str) -> PResult<Type> {
+    map(preceded(char('*'), typ), |typ| Type::Pointer(Box::new(typ)))(input)
+}
+
 fn typ(input: &str) -> PResult<Type> {
-    alt((concrete_type, generic_type))(input)
+    alt((pointer_type, concrete_type, generic_type))(input)
 }
 
 fn type_list(input: &str) -> PResult<Vec<Type>> {

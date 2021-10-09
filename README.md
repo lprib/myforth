@@ -31,3 +31,9 @@ File example:
 ```
 extern fn henlo i32 -> i32;
 ```
+
+## TODO
+- [ ] Make intrinsics generics (ie. `intrinsic fn + num num -> num`) where i32, u8, f32: num
+- [ ] Add spans to parse
+- [ ] Make parsing and typechecking use spans for better error msg
+- [ ] 

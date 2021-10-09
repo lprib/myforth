@@ -188,6 +188,7 @@ impl CodeBlockVisitor for FunctionCodeGen<'_, '_> {
                     args.len() as u32,
                     "\0".c_str(),
                 );
+                // TODO push function returns to value_stack (make struct for multiple returns)
             }
         }
     }
@@ -239,6 +240,9 @@ unsafe fn try_append_intrinsic(
             value_stack.pop().unwrap();
             true
         }
+        // TODO implementh `nth` function for dereferenceing into an array. Need to keep reified
+        // generic types around from the typechecking stage so we know what types are being indexed
+        // (to generate correct getelementptr).
         _ => false,
     }
 }

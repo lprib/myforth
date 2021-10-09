@@ -4,7 +4,10 @@ use ast::visitor;
 use codegen::ModuleCodeGen;
 use typecheck::{FunctionMapBuilder, ModuleTypeChecker};
 
-use crate::{ast::{ConcreteType, Type}, parser::module};
+use crate::{
+    ast::{ConcreteType, Type},
+    parser::module,
+};
 
 mod ast;
 mod codegen;
@@ -21,15 +24,21 @@ fn main() {
     intrinsic fn drop 'T -> ;
     intrinsic fn swap 'T 'U -> 'U 'T;
     intrinsic fn dup 'T -> 'T 'T;
+    intrinsic fn th_int *i32 i32 -> i32;
 
     extern fn main  ;
     
-    fn main -> [
-        50 dup + putchar
-        5 2 * putchar
+    fn a -> i32 [ 5 ]
+    
+    fn p i32 -> [
+        putchar
+    ]
+    
+    fn main -> i32 [
+        a 
     ]
     ";
-    
+
     // let mut gens = HashMap::new();
     // gens.insert("A".to_string(), Type::Concrete(ConcreteType::F32));
 
