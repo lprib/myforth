@@ -24,9 +24,21 @@ pub struct FunctionType {
 pub struct CodeBlock(pub Vec<Word>);
 
 #[derive(Debug)]
-pub struct FunctionDefinition {
+pub struct FunctionHeader {
     pub name: String,
     pub typ: FunctionType,
+}
+
+#[derive(Debug)]
+pub struct FunctionDeclaration {
+    pub head: FunctionHeader,
+    pub is_intrinsic: bool,
+    pub is_extern: bool,
+}
+
+#[derive(Debug)]
+pub struct FunctionImpl {
+    pub head: FunctionHeader,
     pub body: CodeBlock,
 }
 

@@ -112,15 +112,40 @@ fn function_type(input: &str) -> PResult<FunctionType> {
     alt((defined_function_type, not_defined_function_type))(input)
 }
 
-pub fn function_definition(input: &str) -> PResult<FunctionDefinition> {
+fn function_header(input: &str) -> PResult<FunctionHeader> {
     map(
         tuple((
             terminated(tag("fn"), whitespace),
             terminated(word_text, whitespace),
-            terminated(function_type, maybe_whitespace),
+            function_type,
+        )),
+        |(_, name, typ)| FunctionHeader { name, typ },
+    )(input)
+}
+
+pub fn function_declaration(input: &str) -> PResult<FunctionDeclaration> {
+    map(
+        tuple((
+            opt(terminated(tag("extern"), whitespace)),
+            opt(terminated(tag("intrinsic"), whitespace)),
+            terminated(function_header, maybe_whitespace),
+            tag(";"),
+        )),
+        |(extern_opt, intrinsic_opt, head, _)| FunctionDeclaration {
+            head: head,
+            is_extern: extern_opt.is_some(),
+            is_intrinsic: intrinsic_opt.is_some(),
+        },
+    )(input)
+}
+
+pub fn function_impl(input: &str) -> PResult<FunctionImpl> {
+    map(
+        tuple((
+            terminated(function_header, maybe_whitespace),
             code_block,
         )),
-        |(_, name, typ, body)| FunctionDefinition { name, typ, body },
+        |(head, body)| FunctionImpl { head, body },
     )(input)
 }
 

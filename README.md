@@ -25,3 +25,9 @@ intrinsic fn drop 'T -> ;
 intrinsic fn to_stack *'T -> 'T;
 
 ```
+
+File example:
+
+```
+extern fn henlo i32 -> i32;
+```
