@@ -224,6 +224,21 @@ unsafe fn try_append_intrinsic(
         "+" => binop_intrinsic(LLVMBuildAdd, value_stack, context),
         "-" => binop_intrinsic(LLVMBuildSub, value_stack, context),
         "*" => binop_intrinsic(LLVMBuildMul, value_stack, context),
+        "swap" => {
+            let a = value_stack.pop().unwrap();
+            let b = value_stack.pop().unwrap();
+            value_stack.push(a);
+            value_stack.push(b);
+            true
+        }
+        "dup" => {
+            value_stack.push(*value_stack.last().unwrap());
+            true
+        }
+        "drop" => {
+            value_stack.pop().unwrap();
+            true
+        }
         _ => false,
     }
 }
