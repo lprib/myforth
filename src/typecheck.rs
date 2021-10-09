@@ -1,4 +1,4 @@
-use std::{collections::HashMap, thread::panicking};
+use std::collections::HashMap;
 
 use crate::ast::{
     visitor::{self, CodeBlockVisitor, ModuleVisitor},
@@ -131,7 +131,7 @@ impl<'a> ModuleTypeChecker<'a> {
 }
 
 impl ModuleVisitor for ModuleTypeChecker<'_> {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {}
+    fn visit_decl(&mut self, _: &FunctionDecl) {}
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
         let mut type_checker = CodeBlockTypeChecker::new(&f_impl.head.typ, &self.functions);

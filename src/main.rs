@@ -15,9 +15,16 @@ fn main() {
     intrinsic fn + i32 i32 -> i32;
     intrinsic fn - i32 i32 -> i32;
     intrinsic fn * i32 i32 -> i32;
+    intrinsic fn drop i32 -> ;
+    extern fn main  ;
+    
+    fn foo i32 -> [
+        1 + putchar
+    ]
     
     fn main -> [
-        49 2 * 1 + putchar
+        97 foo
+        9 foo
     ]
     ";
     let module = module(test).unwrap().1;

@@ -1,3 +1,5 @@
+use std::ptr;
+use std::slice::{from_raw_parts, from_raw_parts_mut};
 use std::{collections::HashMap, os::raw::c_char};
 
 use crate::ast::visitor::{self, CodeBlockVisitor};
@@ -53,12 +55,16 @@ impl<'a> Context<'a> {
         )
     }
 
-    pub(super) unsafe fn create_function_decl(&mut self, head: &FunctionHeader, is_extern: bool) -> LLVMValueRef {
+    pub(super) unsafe fn create_function_decl(
+        &mut self,
+        head: &FunctionHeader,
+        is_extern: bool,
+    ) -> LLVMValueRef {
         let function_type = self.get_function_type(&head.typ);
         let mut function_name = head.name.clone();
         let new_function = LLVMAddFunction(self.module, function_name.c_str(), function_type);
         if !is_extern {
-            LLVMSetLinkage(new_function, LLVMLinkage::LLVMInternalLinkage);
+            LLVMSetLinkage(new_function, LLVMLinkage::LLVMPrivateLinkage);
         }
         self.generated_functions
             .insert(String::from(&head.name), new_function);
@@ -91,7 +97,8 @@ impl<'a> ModuleVisitor for ModuleCodeGen<'a> {
     fn visit_decl(&mut self, f_decl: &FunctionDecl) {
         if !f_decl.is_intrinsic {
             unsafe {
-                self.context.create_function_decl(&f_decl.head, f_decl.is_extern);
+                self.context
+                    .create_function_decl(&f_decl.head, f_decl.is_extern);
             }
         }
     }
@@ -126,11 +133,18 @@ impl<'a, 'b> FunctionCodeGen<'a, 'b> {
             let entry_block =
                 LLVMAppendBasicBlockInContext(context.context, function, "entry\0".c_str());
             LLVMPositionBuilderAtEnd(context.builder, entry_block);
-        }
-        Self {
-            context,
-            head,
-            value_stack: Vec::new(),
+
+            // push params to value_stack
+            let mut params: LLVMValueRef = ptr::null_mut();
+            LLVMGetParams(function, &mut params as *mut LLVMValueRef);
+            let params = from_raw_parts_mut(params, head.typ.inputs.len());
+            let value_stack = params.iter_mut().map(|p| p as LLVMValueRef).collect();
+
+            Self {
+                context,
+                head,
+                value_stack,
+            }
         }
     }
 }
