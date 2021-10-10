@@ -28,28 +28,26 @@ fn word_text(input: &str) -> PResult<String> {
 }
 
 fn word_function_call(input: &str) -> PResult<Word> {
-    map(word_text, |word| Word::Function(String::from(word)))(input)
+    map(word_text, Word::Function)(input)
 }
 
 fn word_i32_literal(input: &str) -> PResult<Word> {
-    map(i32, |n| Word::I32Literal(n))(input)
+    map(i32, Word::I32Literal)(input)
 }
 
 fn word_f32_literal(input: &str) -> PResult<Word> {
     map_res(
         recognize(tuple((opt(tag("-")), digit1, tag("."), digit1))),
-        |s: &str| s.parse::<f32>().map(|float| Word::F32Literal(float)),
+        |s: &str| s.parse::<f32>().map(Word::F32Literal),
     )(input)
 }
 
 fn word_if_statement(input: &str) -> PResult<Word> {
-    map(if_statement, |if_statement| Word::IfStatement(if_statement))(input)
+    map(if_statement, Word::IfStatement)(input)
 }
 
 fn word_while_statement(input: &str) -> PResult<Word> {
-    map(while_statement, |while_statement| {
-        Word::WhilteStatement(while_statement)
-    })(input)
+    map(while_statement, Word::WhilteStatement)(input)
 }
 
 fn word(input: &str) -> PResult<Word> {
@@ -73,7 +71,7 @@ fn code_block(input: &str) -> PResult<CodeBlock> {
             words,
             pair(opt(whitespace), char(']')),
         ),
-        |words| CodeBlock(words),
+        CodeBlock,
     )(input)
 }
 
@@ -172,7 +170,7 @@ fn function_decl(input: &str) -> PResult<FunctionDecl> {
             tag(";"),
         )),
         |(extern_opt, intrinsic_opt, head, _)| FunctionDecl {
-            head: head,
+            head,
             is_extern: extern_opt.is_some(),
             is_intrinsic: intrinsic_opt.is_some(),
         },
@@ -187,11 +185,11 @@ fn function_impl(input: &str) -> PResult<FunctionImpl> {
 }
 
 fn function_decl_tli(input: &str) -> PResult<TopLevelItem> {
-    map(function_decl, |decl| TopLevelItem::Decl(decl))(input)
+    map(function_decl, TopLevelItem::Decl)(input)
 }
 
 fn function_impl_tli(input: &str) -> PResult<TopLevelItem> {
-    map(function_impl, |f_impl| TopLevelItem::Impl(f_impl))(input)
+    map(function_impl, TopLevelItem::Impl)(input)
 }
 
 pub fn top_level_item(input: &str) -> PResult<TopLevelItem> {

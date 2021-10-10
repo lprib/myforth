@@ -80,7 +80,7 @@ pub mod visitor {
         fn finalize(&mut self) {}
     }
 
-    pub fn walk_module<V: ModuleVisitor>(visitor: &mut V, module: &Vec<TopLevelItem>) {
+    pub fn walk_module<V: ModuleVisitor>(visitor: &mut V, module: &[TopLevelItem]) {
         for top_level_item in module {
             match top_level_item {
                 TopLevelItem::Decl(f_decl) => visitor.visit_decl(f_decl),

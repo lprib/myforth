@@ -1,3 +1,5 @@
 /target
 out.ll
 out
+out.s
+a.out

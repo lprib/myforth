@@ -1,13 +1,8 @@
-use std::collections::HashMap;
-
 use ast::visitor;
 use codegen::ModuleCodeGen;
 use typecheck::{FunctionMapBuilder, ModuleTypeChecker};
 
-use crate::{
-    ast::{ConcreteType, Type},
-    parser::module,
-};
+use crate::parser::module;
 
 mod ast;
 mod codegen;
@@ -36,6 +31,22 @@ fn main() {
     
     fn main -> i32 [
         a 
+    ]
+    ";
+
+    let test = "
+    extern fn putchar i32 -> ;
+    extern fn main -> ;
+
+    intrinsic fn dup 'T -> 'T 'T;
+    intrinsic fn drop 'T -> ;
+    intrinsic fn swap 'T 'U -> 'U 'T;
+    intrinsic fn + i32 i32 -> i32;
+
+    fn test3 -> i32 i32 i32 [ 10 97 99 ]
+    
+    fn main -> [
+        test3 putchar putchar putchar
     ]
     ";
 

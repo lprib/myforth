@@ -62,7 +62,7 @@ struct CodeBlockTypeChecker<'a> {
 
 impl<'a> CodeBlockTypeChecker<'a> {
     fn new(self_type: &'a FunctionType, function_map: &'a HashMap<String, FunctionType>) -> Self {
-        let type_stack = self_type.inputs.iter().cloned().collect();
+        let type_stack = self_type.inputs.to_vec();
         Self {
             function_map,
             type_stack,
@@ -93,8 +93,8 @@ impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
                 for input_type in typ.inputs.iter().rev() {
                     let top_type = self.type_stack
                         .pop()
-                        .expect(
-                            &format!(
+                        .unwrap_or_else(||
+                            panic!(
                                 "Expected a {:?} on the stack to pass to {}, but there was nothing on the stack", 
                                 input_type,
                                 name
@@ -193,7 +193,7 @@ impl ModuleVisitor for ModuleTypeChecker<'_> {
     fn visit_decl(&mut self, _: &FunctionDecl) {}
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        let mut type_checker = CodeBlockTypeChecker::new(&f_impl.head.typ, &self.functions);
+        let mut type_checker = CodeBlockTypeChecker::new(&f_impl.head.typ, self.functions);
         visitor::walk_code_block(&mut type_checker, &f_impl.body);
         println!("Function {} typechecked OK.", f_impl.head.name);
     }
