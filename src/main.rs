@@ -12,41 +12,23 @@ mod typecheck;
 fn main() {
     let test = "
     extern fn putchar i32 -> ;
-
-    intrinsic fn + i32 i32 -> i32;
-    intrinsic fn - i32 i32 -> i32;
-    intrinsic fn * i32 i32 -> i32;
-    intrinsic fn drop 'T -> ;
-    intrinsic fn swap 'T 'U -> 'U 'T;
-    intrinsic fn dup 'T -> 'T 'T;
-    intrinsic fn th_int *i32 i32 -> i32;
-
-    extern fn main  ;
-    
-    fn a -> i32 [ 5 ]
-    
-    fn p i32 -> [
-        putchar
-    ]
-    
-    fn main -> i32 [
-        a 
-    ]
-    ";
-
-    let test = "
-    extern fn putchar i32 -> ;
     extern fn main -> ;
 
     intrinsic fn dup 'T -> 'T 'T;
     intrinsic fn drop 'T -> ;
     intrinsic fn swap 'T 'U -> 'U 'T;
     intrinsic fn + i32 i32 -> i32;
+    intrinsic fn < i32 i32 -> bool;
+    intrinsic fn = i32 i32 -> bool;
 
     fn test3 -> i32 i32 i32 [ 10 97 99 ]
     
     fn main -> [
         test3 putchar putchar putchar
+    ]
+    
+    fn bar i32 i32 -> bool [
+        drop drop f
     ]
     ";
 

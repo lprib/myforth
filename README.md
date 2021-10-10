@@ -34,6 +34,9 @@ extern fn henlo i32 -> i32;
 
 ## TODO
 - [ ] Make intrinsics generics (ie. `intrinsic fn + num num -> num`) where i32, u8, f32: num
+    - IntLike = bool | i32 | i64
+    - General notion of type inheritance for intrinsics
 - [ ] Add spans to parse
 - [ ] Make parsing and typechecking use spans for better error msg
 - [ ] In typecheck: ensure implementation type matches definition
+- [ ] if/while

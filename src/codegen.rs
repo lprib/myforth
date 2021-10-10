@@ -33,6 +33,7 @@ impl<'a> Context<'a> {
             Type::Concrete(concrete_type) => match concrete_type {
                 ConcreteType::I32 => LLVMInt32TypeInContext(self.context),
                 ConcreteType::F32 => LLVMBFloatTypeInContext(self.context),
+                ConcreteType::Bool => LLVMInt1TypeInContext(self.context),
             },
             Type::Generic(_) => todo!(),
             Type::Pointer(_) => todo!("Keep track of reified generic values from typechecking"),
@@ -217,6 +218,17 @@ impl CodeBlockVisitor for FunctionCodeGen<'_, '_> {
         }
     }
 
+    fn visit_bool_literal(&mut self, n: bool) {
+        unsafe {
+            self.value_stack.push(LLVMConstInt(
+                self.context
+                    .get_llvm_type(&Type::Concrete(ConcreteType::Bool)),
+                if n { 1 } else { 0 },
+                false as LLVMBool,
+            ))
+        }
+    }
+
     // send the top n value_stack items to the function.
     // The result will either be void (no effect), single return (push return to value stack),
     // or multiple return (create return struct value, unpack all inner values to value_stack)
@@ -256,11 +268,11 @@ impl CodeBlockVisitor for FunctionCodeGen<'_, '_> {
         }
     }
 
-    fn visit_if_statement(&mut self, statment: &IfStatement) {
+    fn visit_if_statement(&mut self, _statment: &IfStatement) {
         todo!()
     }
 
-    fn visit_while_statement(&mut self, statment: &WhileStatement) {
+    fn visit_while_statement(&mut self, _statment: &WhileStatement) {
         todo!()
     }
 
@@ -296,6 +308,12 @@ unsafe fn try_append_intrinsic(
         "+" => binop_intrinsic(LLVMBuildAdd, value_stack, context),
         "-" => binop_intrinsic(LLVMBuildSub, value_stack, context),
         "*" => binop_intrinsic(LLVMBuildMul, value_stack, context),
+        "=" => icmp_intrinsic(LLVMIntPredicate::LLVMIntEQ, value_stack, context),
+        "!=" => icmp_intrinsic(LLVMIntPredicate::LLVMIntNE, value_stack, context),
+        ">" => icmp_intrinsic(LLVMIntPredicate::LLVMIntSGT, value_stack, context),
+        "<" => icmp_intrinsic(LLVMIntPredicate::LLVMIntSLT, value_stack, context),
+        ">=" => icmp_intrinsic(LLVMIntPredicate::LLVMIntSGE, value_stack, context),
+        "<=" => icmp_intrinsic(LLVMIntPredicate::LLVMIntSLE, value_stack, context),
         "swap" => {
             let a = value_stack.pop().unwrap();
             let b = value_stack.pop().unwrap();
@@ -329,6 +347,18 @@ unsafe fn binop_intrinsic(
     let rhs = value_stack.pop().unwrap();
     let lhs = value_stack.pop().unwrap();
     let new = f(context.builder, lhs, rhs, "\0".c_str());
+    value_stack.push(new);
+    true
+}
+
+unsafe fn icmp_intrinsic(
+    predicate: LLVMIntPredicate,
+    value_stack: &mut Vec<LLVMValueRef>,
+    context: &mut Context,
+) -> bool {
+    let rhs = value_stack.pop().unwrap();
+    let lhs = value_stack.pop().unwrap();
+    let new = LLVMBuildICmp(context.builder, predicate, lhs, rhs, "\0".c_str());
     value_stack.push(new);
     true
 }

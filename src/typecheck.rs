@@ -79,6 +79,10 @@ impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
     fn visit_f32_literal(&mut self, _: f32) {
         self.type_stack.push(Type::Concrete(ConcreteType::F32))
     }
+    
+    fn visit_bool_literal(&mut self, _: bool) {
+        self.type_stack.push(Type::Concrete(ConcreteType::Bool))
+    }
 
     fn visit_function(&mut self, name: &str) {
         match self.function_map.get(name) {
@@ -119,11 +123,11 @@ impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
         }
     }
 
-    fn visit_if_statement(&mut self, statment: &IfStatement) {
+    fn visit_if_statement(&mut self, _statment: &IfStatement) {
         todo!()
     }
 
-    fn visit_while_statement(&mut self, statment: &WhileStatement) {
+    fn visit_while_statement(&mut self, _statment: &WhileStatement) {
         todo!()
     }
 

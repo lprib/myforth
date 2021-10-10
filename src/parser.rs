@@ -3,7 +3,7 @@ use nom::{
     branch::alt,
     bytes::complete::{tag, take_until},
     character::complete::{alphanumeric1, char, digit1, i32, multispace1, none_of},
-    combinator::{all_consuming, map, map_res, opt, recognize},
+    combinator::{all_consuming, map, map_opt, map_res, opt, recognize},
     multi::{many1, separated_list0, separated_list1},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     IResult,
@@ -37,9 +37,21 @@ fn word_i32_literal(input: &str) -> PResult<Word> {
 
 fn word_f32_literal(input: &str) -> PResult<Word> {
     map_res(
-        recognize(tuple((opt(tag("-")), digit1, tag("."), digit1))),
+        recognize(tuple((opt(char('-')), digit1, char('.'), digit1))),
         |s: &str| s.parse::<f32>().map(Word::F32Literal),
     )(input)
+}
+
+fn true_literal(input: &str) -> PResult<Word> {
+    map_opt(word_text, |text| {
+        (text == "t").then(|| Word::BoolLiteral(true))
+    })(input)
+}
+
+fn false_literal(input: &str) -> PResult<Word> {
+    map_opt(word_text, |text| {
+        (text == "f").then(|| Word::BoolLiteral(false))
+    })(input)
 }
 
 fn word_if_statement(input: &str) -> PResult<Word> {
@@ -56,6 +68,8 @@ fn word(input: &str) -> PResult<Word> {
         word_while_statement,
         word_f32_literal,
         word_i32_literal,
+        true_literal,
+        false_literal,
         word_function_call,
     ))(input)
 }
@@ -103,11 +117,12 @@ fn while_statement(input: &str) -> PResult<WhileStatement> {
 }
 
 fn concrete_type(input: &str) -> PResult<Type> {
-    let (input, typ) = alt((tag("i32"), tag("f32")))(input)?;
+    let (input, typ) = alt((tag("i32"), tag("f32"), tag("bool")))(input)?;
 
     match typ {
         "i32" => Ok((input, Type::Concrete(ConcreteType::I32))),
         "f32" => Ok((input, Type::Concrete(ConcreteType::F32))),
+        "bool" => Ok((input, Type::Concrete(ConcreteType::Bool))),
         _ => unreachable!(),
     }
 }

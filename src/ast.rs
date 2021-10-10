@@ -3,6 +3,7 @@
 pub enum ConcreteType {
     I32,
     F32,
+    Bool
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -36,6 +37,7 @@ pub struct WhileStatement {
 pub enum Word {
     I32Literal(i32),
     F32Literal(f32),
+    BoolLiteral(bool),
     Function(String),
     IfStatement(IfStatement),
     WhilteStatement(WhileStatement),
@@ -93,6 +95,7 @@ pub mod visitor {
     pub trait CodeBlockVisitor {
         fn visit_i32_literal(&mut self, n: i32);
         fn visit_f32_literal(&mut self, n: f32);
+        fn visit_bool_literal(&mut self, n: bool);
         fn visit_function(&mut self, name: &str);
         fn visit_if_statement(&mut self, statment: &IfStatement);
         fn visit_while_statement(&mut self, statment: &WhileStatement);
@@ -102,8 +105,9 @@ pub mod visitor {
     pub fn walk_code_block<V: CodeBlockVisitor>(visitor: &mut V, block: &CodeBlock) {
         for word in &block.0 {
             match word {
-                Word::I32Literal(i) => visitor.visit_i32_literal(*i),
-                Word::F32Literal(f) => visitor.visit_f32_literal(*f),
+                Word::I32Literal(n) => visitor.visit_i32_literal(*n),
+                Word::F32Literal(n) => visitor.visit_f32_literal(*n),
+                Word::BoolLiteral(n) => visitor.visit_bool_literal(*n),
                 Word::Function(s) => visitor.visit_function(s),
                 Word::IfStatement(if_statement) => visitor.visit_if_statement(if_statement),
                 Word::WhilteStatement(while_statement) => {
