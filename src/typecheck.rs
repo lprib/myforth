@@ -162,6 +162,7 @@ impl FunctionMapBuilder {
     }
 }
 
+// TODO make sure implementation type matches declaration type
 impl ModuleVisitor for FunctionMapBuilder {
     fn visit_decl(&mut self, f_decl: &FunctionDecl) {
         if self.functions.contains_key(&f_decl.head.name) {
@@ -350,5 +351,22 @@ mod tests {
     #[should_panic]
     fn test_no_call_args() {
         typecheck("fn a f32 -> ; fn b [ a ]");
+    }
+    
+    #[test]
+    fn test_decl_then_impl() {
+        typecheck("fn a; fn a [ ]");
+    }
+    
+    #[test]
+    #[should_panic]
+    fn test_redecl() {
+        typecheck("fn a; fn a;");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_reimpl() {
+        typecheck("fn a [ ] fn a [ ]");
     }
 }
