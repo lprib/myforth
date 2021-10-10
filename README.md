@@ -40,3 +40,4 @@ extern fn henlo i32 -> i32;
 - [ ] Make parsing and typechecking use spans for better error msg
 - [ ] In typecheck: ensure implementation type matches definition
 - [ ] if/while
+- [ ] parser failing if there is a function at end of module with no whitespace after

@@ -24,7 +24,7 @@ fn comment(input: &str) -> PResult<&str> {
 }
 
 fn word_text(input: &str) -> PResult<String> {
-    map(recognize(many1(none_of(" []()\t\r\n"))), String::from)(input)
+    map(recognize(many1(none_of(" []()\t\r\n;"))), String::from)(input)
 }
 
 fn word_function_call(input: &str) -> PResult<Word> {
@@ -81,9 +81,9 @@ fn words(input: &str) -> PResult<Vec<Word>> {
 fn code_block(input: &str) -> PResult<CodeBlock> {
     map(
         delimited(
-            pair(char('['), opt(whitespace)),
+            pair(char('['), maybe_whitespace),
             words,
-            pair(opt(whitespace), char(']')),
+            pair(maybe_whitespace, char(']')),
         ),
         CodeBlock,
     )(input)
@@ -182,7 +182,7 @@ fn function_decl(input: &str) -> PResult<FunctionDecl> {
             opt(terminated(tag("extern"), whitespace)),
             opt(terminated(tag("intrinsic"), whitespace)),
             terminated(function_header, maybe_whitespace),
-            tag(";"),
+            char(';'),
         )),
         |(extern_opt, intrinsic_opt, head, _)| FunctionDecl {
             head,
@@ -211,10 +211,90 @@ pub fn top_level_item(input: &str) -> PResult<TopLevelItem> {
     alt((function_impl_tli, function_decl_tli))(input)
 }
 
+// TODO note that TLIs must be separates by some whitespace. If we want to be able to define
+// directly adjacent TLIs eg. `fn a;fn b;`, cannot use separated_list1. Separating by
+// maybe_whitespace doesn't work because maybe_whitespace matches an empty string, meaning the
+// parser will look for another TLI even if there are none because it already saw a separator on
+// the end of the file (ie. the  "" separator)
 pub fn module(input: &str) -> PResult<Vec<TopLevelItem>> {
     all_consuming(delimited(
         maybe_whitespace,
-        separated_list1(maybe_whitespace, top_level_item),
+        separated_list0(whitespace, top_level_item),
         maybe_whitespace,
     ))(input)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    type TestResult = Result<(), String>;
+    trait ParserTester {
+        fn test(self) -> TestResult;
+    }
+
+    impl<T> ParserTester for PResult<'_, T> {
+        fn test(self) -> TestResult {
+            match self {
+                Ok((remaining, _)) => {
+                    if !remaining.is_empty() {
+                        Err("Parser did not consume entire str".to_string())
+                    } else {
+                        Ok(())
+                    }
+                }
+                Err(e) => Err(e.to_string()),
+            }
+        }
+    }
+
+    #[test]
+    fn test_impl() -> TestResult {
+        top_level_item("fn foo -> [ ]").test()?;
+        top_level_item("fn foo -> []").test()?;
+        top_level_item("fn foo i32 -> i32 [ ]").test()?;
+        top_level_item("fn foo i32 -> [ ]").test()?;
+        top_level_item("fn foo -> i32 [ ]").test()?;
+        top_level_item("fn foo i32 f32 bool -> i32 [ ]").test()?;
+        top_level_item("fn foo 'Typ 'Typ2 *'Typ i32 f32 bool -> 'Typ 'Typ2 *'Typ i32 f32 bool [ ]")
+            .test()?;
+        top_level_item("fn foo [ ]").test()
+    }
+
+    #[test]
+    fn test_decl() -> TestResult {
+        top_level_item("fn foo ;").test()?;
+        top_level_item("fn foo -> ;").test()?;
+        top_level_item("fn foo i32 -> i32 ;").test()?;
+        top_level_item("fn foo i32 -> ;").test()?;
+        top_level_item("fn foo -> i32 ;").test()?;
+        top_level_item("fn foo i32 f32 bool -> i32 ;").test()?;
+        top_level_item("fn foo 'Typ 'Typ2 *'Typ i32 f32 bool -> 'Typ 'Typ2 *'Typ i32 f32 bool ;")
+            .test()?;
+        top_level_item("fn foo;").test()?;
+        top_level_item("fn foo ->;").test()?;
+        top_level_item("fn foo -> i32;").test()?;
+        top_level_item("fn foo i32 ->;").test()?;
+        top_level_item("fn foo i32 -> i32;").test()
+    }
+    
+    #[test]
+    fn test_module() -> TestResult {
+        module("fn a; fn b;").test()?;
+        module("fn a;").test()?;
+        module(" fn a; fn b; ").test()?;
+        module("").test()?;
+        module("(comment)").test()
+    }
+
+    #[test]
+    fn test_whitespace() -> TestResult {
+        whitespace(" ").test()?;
+        whitespace(" \t\n(co\nmment) ").test()?;
+        whitespace("(comment)(com \r\nm\rent)").test()?;
+        maybe_whitespace(" ").test()?;
+        maybe_whitespace(" \t\n(comment) ").test()?;
+        maybe_whitespace("(comment)(comment)").test()?;
+        maybe_whitespace("").test()
+    }
 }
