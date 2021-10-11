@@ -1,236 +1,16 @@
-use std::iter::repeat;
-use std::ptr;
-use std::{collections::HashMap, os::raw::c_char};
+use std::os::raw::c_char;
 
 use crate::ast::visitor::CodeBlockVisitor;
-use crate::ast::{visitor::ModuleVisitor, FunctionType};
-use crate::ast::{
-    ConcreteType, FunctionDecl, FunctionHeader, FunctionImpl, IfStatement, Type, WhileStatement,
-};
+use crate::ast::{ConcreteType, IfStatement, Type, WhileStatement};
 
-use llvm::analysis::LLVMVerifyFunction;
 use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
 use llvm_sys as llvm;
 
-#[derive(Clone, Copy)]
-struct GeneratedFunction {
-    function_value: LLVMValueRef,
-    return_type: LLVMTypeRef,
-}
+use super::{Context, ToCStr};
 
-struct Context<'a> {
-    context: LLVMContextRef,
-    module: LLVMModuleRef,
-    builder: LLVMBuilderRef,
-    generated_functions: HashMap<String, GeneratedFunction>,
-    functions: &'a HashMap<String, FunctionType>,
-}
-
-impl<'a> Context<'a> {
-    pub(super) unsafe fn get_llvm_type(&mut self, typ: &Type) -> LLVMTypeRef {
-        match typ {
-            Type::Concrete(concrete_type) => match concrete_type {
-                ConcreteType::I32 => LLVMInt32TypeInContext(self.context),
-                ConcreteType::F32 => LLVMBFloatTypeInContext(self.context),
-                ConcreteType::Bool => LLVMInt1TypeInContext(self.context),
-            },
-            Type::Generic(_) => todo!(),
-            Type::Pointer(_) => todo!("Keep track of reified generic values from typechecking"),
-        }
-    }
-
-    pub(super) unsafe fn get_function_type(
-        &mut self,
-        typ: &FunctionType,
-        return_type: LLVMTypeRef,
-    ) -> LLVMTypeRef {
-        let mut param_types = typ
-            .inputs
-            .iter()
-            .map(|t| self.get_llvm_type(t))
-            .collect::<Vec<_>>();
-
-        LLVMFunctionType(
-            return_type,
-            param_types.as_mut_ptr(),
-            param_types.len() as u32,
-            0,
-        )
-    }
-
-    pub(super) unsafe fn create_return_type(&mut self, head: &FunctionHeader) -> LLVMTypeRef {
-        match &head.typ.outputs.len() {
-            0 => LLVMVoidTypeInContext(self.context),
-            1 => self.get_llvm_type(&head.typ.outputs[0]),
-            _ => {
-                let mut ret_type_name = String::from(&head.name);
-                ret_type_name.push_str("_output");
-                let ret_type_name = ret_type_name.c_str();
-                // Create return structure
-                let ret_struct = LLVMStructCreateNamed(self.context, ret_type_name);
-
-                // Fill return structure
-                let mut ret_types = Vec::new();
-                for ret_type in &head.typ.outputs {
-                    let ret_struct_member = self.get_llvm_type(ret_type);
-                    ret_types.push(ret_struct_member);
-                }
-
-                LLVMStructSetBody(
-                    ret_struct,
-                    ret_types.as_mut_ptr(),
-                    head.typ.outputs.len() as u32,
-                    false as LLVMBool,
-                );
-
-                ret_struct
-            }
-        }
-    }
-
-    pub(super) unsafe fn create_function_decl(
-        &mut self,
-        head: &FunctionHeader,
-        is_extern: bool,
-    ) -> GeneratedFunction {
-        let return_type = self.create_return_type(head);
-        let function_type = self.get_function_type(&head.typ, return_type);
-
-        let mut function_name = head.name.clone();
-        let function_value = LLVMAddFunction(self.module, function_name.c_str(), function_type);
-        if !is_extern {
-            LLVMSetLinkage(function_value, LLVMLinkage::LLVMPrivateLinkage);
-        }
-
-        self.generated_functions.insert(
-            String::from(&head.name),
-            GeneratedFunction {
-                function_value,
-                return_type,
-            },
-        );
-
-        self.generated_functions[&head.name]
-    }
-}
-
-pub struct ModuleCodeGen<'a> {
-    context: Context<'a>,
-}
-
-impl<'a> ModuleCodeGen<'a> {
-    pub fn new(functions: &'a HashMap<String, FunctionType>) -> Self {
-        unsafe {
-            let context = LLVMContextCreate();
-            Self {
-                context: Context {
-                    context,
-                    module: LLVMModuleCreateWithNameInContext("main_module\0".c_str(), context),
-                    builder: LLVMCreateBuilderInContext(context),
-                    generated_functions: HashMap::new(),
-                    functions,
-                },
-            }
-        }
-    }
-}
-
-impl<'a> ModuleVisitor<()> for ModuleCodeGen<'a> {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
-        if !f_decl.is_intrinsic {
-            unsafe {
-                self.context
-                    .create_function_decl(&f_decl.head, f_decl.is_extern);
-            }
-        }
-    }
-
-    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        unsafe {
-            // If the function already exists in the generated functions, append to it.
-            // This is the case if there was a forward declaration.
-            let function = if self
-                .context
-                .generated_functions
-                .contains_key(&f_impl.head.name)
-            {
-                self.context.generated_functions[&f_impl.head.name]
-            } else {
-                self.context.create_function_decl(&f_impl.head, false)
-            };
-
-            let entry_bb = LLVMAppendBasicBlockInContext(
-                self.context.context,
-                function.function_value,
-                "entry\0".c_str(),
-            );
-            LLVMPositionBuilderAtEnd(self.context.builder, entry_bb);
-
-            // initial value_stack is the parameters passed to the function
-            let mut params: Vec<LLVMValueRef> = vec![ptr::null_mut(); f_impl.head.typ.inputs.len()];
-            let params_ptr = params.as_mut_ptr();
-            LLVMGetParams(function.function_value, params_ptr);
-
-            // Generate the body of the function as a CodeBlock:
-            // The code block generation takes the function's parameters as it's initial stack
-            let (mut output_stack, _) = CodeBlockCodeGen::new(
-                &mut self.context,
-                function.function_value,
-                params,
-                entry_bb,
-            )
-            .walk(&f_impl.body);
-
-            match f_impl.head.typ.outputs.len() {
-                0 => LLVMBuildRetVoid(self.context.builder),
-                1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap()),
-                _ => {
-                    // Allocate space for the return struct on stack
-                    let return_alloca = LLVMBuildAlloca(
-                        self.context.builder,
-                        self.context.generated_functions[&f_impl.head.name].return_type,
-                        "return_struct_ptr\0".c_str(),
-                    );
-
-                    // Create a GEP and store instruction for each return value
-                    for (i, output_val) in output_stack.into_iter().enumerate() {
-                        let output_ptr = LLVMBuildStructGEP(
-                            self.context.builder,
-                            return_alloca,
-                            i as u32,
-                            "return_value_ptr\0".c_str(),
-                        );
-                        LLVMBuildStore(self.context.builder, output_val, output_ptr);
-                    }
-                    // Load the populated return structure into a value
-                    let return_struct = LLVMBuildLoad(
-                        self.context.builder,
-                        return_alloca,
-                        "return_value\0".c_str(),
-                    );
-
-                    // Return the loaded structure
-                    LLVMBuildRet(self.context.builder, return_struct)
-                }
-            };
-
-            LLVMVerifyFunction(
-                self.context.generated_functions[&f_impl.head.name].function_value,
-                analysis::LLVMVerifierFailureAction::LLVMPrintMessageAction,
-            );
-        }
-    }
-
-    fn finalize(self) {
-        unsafe {
-            LLVMDumpModule(self.context.module);
-        }
-    }
-}
-
-struct CodeBlockCodeGen<'a, 'b> {
+pub(super) struct CodeBlockCodeGen<'a, 'b> {
     context: &'a mut Context<'b>,
     containing_function: LLVMValueRef,
     value_stack: Vec<LLVMValueRef>,
@@ -238,7 +18,7 @@ struct CodeBlockCodeGen<'a, 'b> {
 }
 
 impl<'a, 'b> CodeBlockCodeGen<'a, 'b> {
-    fn new(
+    pub(super) fn new(
         context: &'a mut Context<'b>,
         containing_function: LLVMValueRef,
         value_stack: Vec<LLVMValueRef>,
@@ -327,14 +107,6 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
     fn visit_if_statement(&mut self, statement: &IfStatement) {
         unsafe {
             let predicate = self.value_stack.pop().unwrap();
-
-            // let if_entry_bb = LLVMAppendBasicBlockInContext(
-            //     self.context.context,
-            //     self.containing_function,
-            //     "if_entry\0".c_str(),
-            // );
-
-            // LLVMBuildBr(self.context.builder, if_entry_bb);
 
             let true_bb = LLVMAppendBasicBlockInContext(
                 self.context.context,
@@ -475,23 +247,4 @@ unsafe fn icmp_intrinsic(
     let new = LLVMBuildICmp(context.builder, predicate, lhs, rhs, "\0".c_str());
     value_stack.push(new);
     true
-}
-
-trait ToCStr {
-    fn c_str(self) -> *const c_char;
-}
-
-impl ToCStr for &'static str {
-    /// NOTE: this implementation needs a '\0' manually added to the end
-    fn c_str(self) -> *const c_char {
-        self.as_bytes().as_ptr() as *const c_char
-    }
-}
-
-impl ToCStr for &mut String {
-    /// NOTE: this implementation automatically adds zero terminator
-    fn c_str(self) -> *const c_char {
-        self.push('\0');
-        self.as_bytes().as_ptr() as *const c_char
-    }
 }
