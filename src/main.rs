@@ -1,7 +1,4 @@
-use std::{
-    fs,
-    process::{Command, ExitStatus},
-};
+use std::{fs, process::Command};
 
 use ast::visitor::ModuleVisitor;
 use codegen::module::ModuleCodeGen;
