@@ -1,7 +1,7 @@
 use std::ptr;
 use std::{collections::HashMap, os::raw::c_char};
 
-use crate::ast::visitor::{self, CodeBlockVisitor};
+use crate::ast::visitor::CodeBlockVisitor;
 use crate::ast::{visitor::ModuleVisitor, FunctionType};
 use crate::ast::{
     ConcreteType, FunctionDecl, FunctionHeader, FunctionImpl, IfStatement, Type, WhileStatement,
@@ -136,7 +136,7 @@ impl<'a> ModuleCodeGen<'a> {
     }
 }
 
-impl<'a> ModuleVisitor for ModuleCodeGen<'a> {
+impl<'a> ModuleVisitor<()> for ModuleCodeGen<'a> {
     fn visit_decl(&mut self, f_decl: &FunctionDecl) {
         if !f_decl.is_intrinsic {
             unsafe {
@@ -147,11 +147,10 @@ impl<'a> ModuleVisitor for ModuleCodeGen<'a> {
     }
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        let mut codegen = FunctionCodeGen::new(&mut self.context, &f_impl.head);
-        visitor::walk_code_block(&mut codegen, &f_impl.body);
+        FunctionCodeGen::new(&mut self.context, &f_impl.head).walk(&f_impl.body);
     }
 
-    fn finalize(&mut self) {
+    fn finalize(self) {
         unsafe {
             LLVMDumpModule(self.context.module);
         }
@@ -195,7 +194,7 @@ impl<'a, 'b> FunctionCodeGen<'a, 'b> {
     }
 }
 
-impl CodeBlockVisitor for FunctionCodeGen<'_, '_> {
+impl CodeBlockVisitor<()> for FunctionCodeGen<'_, '_> {
     fn visit_i32_literal(&mut self, n: i32) {
         unsafe {
             self.value_stack.push(LLVMConstInt(
@@ -276,7 +275,7 @@ impl CodeBlockVisitor for FunctionCodeGen<'_, '_> {
         todo!()
     }
 
-    fn finalize(&mut self) {
+    fn finalize(mut self) {
         unsafe {
             match self.head.typ.outputs.len() {
                 0 => LLVMBuildRetVoid(self.context.builder),

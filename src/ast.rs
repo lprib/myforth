@@ -3,7 +3,7 @@
 pub enum ConcreteType {
     I32,
     F32,
-    Bool
+    Bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -76,45 +76,43 @@ pub enum TopLevelItem {
 pub mod visitor {
     use super::*;
 
-    pub trait ModuleVisitor {
+    pub trait ModuleVisitor<T> where Self: Sized {
         fn visit_decl(&mut self, f_decl: &FunctionDecl);
         fn visit_impl(&mut self, f_impl: &FunctionImpl);
-        fn finalize(&mut self) {}
-    }
-
-    pub fn walk_module<V: ModuleVisitor>(visitor: &mut V, module: &[TopLevelItem]) {
-        for top_level_item in module {
-            match top_level_item {
-                TopLevelItem::Decl(f_decl) => visitor.visit_decl(f_decl),
-                TopLevelItem::Impl(f_impl) => visitor.visit_impl(f_impl),
+        fn finalize(self) -> T;
+        fn walk(mut self, module: &[TopLevelItem]) -> T {
+            for top_level_item in module {
+                match top_level_item {
+                    TopLevelItem::Decl(f_decl) => self.visit_decl(f_decl),
+                    TopLevelItem::Impl(f_impl) => self.visit_impl(f_impl),
+                }
             }
+            self.finalize()
         }
-        visitor.finalize();
     }
 
-    pub trait CodeBlockVisitor {
+    pub trait CodeBlockVisitor<T> where Self: Sized {
         fn visit_i32_literal(&mut self, n: i32);
         fn visit_f32_literal(&mut self, n: f32);
         fn visit_bool_literal(&mut self, n: bool);
         fn visit_function(&mut self, name: &str);
         fn visit_if_statement(&mut self, statment: &IfStatement);
         fn visit_while_statement(&mut self, statment: &WhileStatement);
-        fn finalize(&mut self) {}
-    }
-
-    pub fn walk_code_block<V: CodeBlockVisitor>(visitor: &mut V, block: &CodeBlock) {
-        for word in &block.0 {
-            match word {
-                Word::I32Literal(n) => visitor.visit_i32_literal(*n),
-                Word::F32Literal(n) => visitor.visit_f32_literal(*n),
-                Word::BoolLiteral(n) => visitor.visit_bool_literal(*n),
-                Word::Function(s) => visitor.visit_function(s),
-                Word::IfStatement(if_statement) => visitor.visit_if_statement(if_statement),
-                Word::WhilteStatement(while_statement) => {
-                    visitor.visit_while_statement(while_statement)
+        fn finalize(self) -> T;
+        fn walk(mut self, block: &CodeBlock) -> T {
+            for word in &block.0 {
+                match word {
+                    Word::I32Literal(n) => self.visit_i32_literal(*n),
+                    Word::F32Literal(n) => self.visit_f32_literal(*n),
+                    Word::BoolLiteral(n) => self.visit_bool_literal(*n),
+                    Word::Function(s) => self.visit_function(s),
+                    Word::IfStatement(if_statement) => self.visit_if_statement(if_statement),
+                    Word::WhilteStatement(while_statement) => {
+                        self.visit_while_statement(while_statement)
+                    }
                 }
             }
+            self.finalize()
         }
-        visitor.finalize();
     }
 }

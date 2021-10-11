@@ -4,7 +4,7 @@ use nom::{
     bytes::complete::{tag, take_until},
     character::complete::{alphanumeric1, char, digit1, i32, multispace1, none_of},
     combinator::{all_consuming, map, map_opt, map_res, opt, recognize},
-    multi::{many1, separated_list0, separated_list1},
+    multi::{many1, separated_list0},
     sequence::{delimited, pair, preceded, separated_pair, terminated, tuple},
     IResult,
 };
@@ -277,7 +277,7 @@ mod tests {
         top_level_item("fn foo i32 ->;").test()?;
         top_level_item("fn foo i32 -> i32;").test()
     }
-    
+
     #[test]
     fn test_module() -> TestResult {
         module("fn a; fn b;").test()?;

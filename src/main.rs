@@ -1,4 +1,4 @@
-use ast::visitor;
+use ast::visitor::ModuleVisitor;
 use codegen::ModuleCodeGen;
 use typecheck::{FunctionMapBuilder, ModuleTypeChecker};
 
@@ -44,14 +44,8 @@ fn main() {
 
     let module = module(test).unwrap().1;
 
-    let mut map_builder = FunctionMapBuilder::new();
-    visitor::walk_module(&mut map_builder, &module);
+    let functions = FunctionMapBuilder::new().walk(&module);
 
-    let functions = map_builder.get_final_map();
-
-    let mut type_checker = ModuleTypeChecker::new(&functions);
-    visitor::walk_module(&mut type_checker, &module);
-
-    let mut codegen = ModuleCodeGen::new(&functions);
-    visitor::walk_module(&mut codegen, &module);
+    ModuleTypeChecker::new(&functions).walk(&module);
+    ModuleCodeGen::new(&functions).walk(&module);
 }

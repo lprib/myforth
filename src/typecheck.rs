@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::ast::{
-    visitor::{self, CodeBlockVisitor, ModuleVisitor},
+    visitor::{CodeBlockVisitor, ModuleVisitor},
     ConcreteType, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type, WhileStatement,
 };
 
@@ -71,7 +71,7 @@ impl<'a> CodeBlockTypeChecker<'a> {
     }
 }
 
-impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
+impl CodeBlockVisitor<()> for CodeBlockTypeChecker<'_> {
     fn visit_i32_literal(&mut self, _: i32) {
         self.type_stack.push(Type::Concrete(ConcreteType::I32))
     }
@@ -131,7 +131,7 @@ impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
         todo!()
     }
 
-    fn finalize(&mut self) {
+    fn finalize(self) {
         assert!(
             self.type_stack == self.expected_stack_effect.outputs,
             "Expected function to leave {:?} on the stack, instead it left {:?}",
@@ -152,18 +152,10 @@ impl FunctionMapBuilder {
             functions: HashMap::new(),
         }
     }
-
-    pub fn get_final_map(self) -> HashMap<String, FunctionType> {
-        self.functions
-            .into_iter()
-            // remove bool in tuple
-            .map(|(name, (typ, _))| (name, typ))
-            .collect()
-    }
 }
 
 // TODO make sure implementation type matches declaration type
-impl ModuleVisitor for FunctionMapBuilder {
+impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
     fn visit_decl(&mut self, f_decl: &FunctionDecl) {
         if self.functions.contains_key(&f_decl.head.name) {
             // TODO "previous declaration at X:X:X"
@@ -182,6 +174,14 @@ impl ModuleVisitor for FunctionMapBuilder {
         self.functions
             .insert(f_impl.head.name.clone(), (f_impl.head.typ.clone(), true));
     }
+
+    fn finalize(self) -> HashMap<String, FunctionType> {
+        self.functions
+            .into_iter()
+            // remove bool in tuple
+            .map(|(name, (typ, _))| (name, typ))
+            .collect()
+    }
 }
 
 pub struct ModuleTypeChecker<'a> {
@@ -194,14 +194,15 @@ impl<'a> ModuleTypeChecker<'a> {
     }
 }
 
-impl ModuleVisitor for ModuleTypeChecker<'_> {
+impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
     fn visit_decl(&mut self, _: &FunctionDecl) {}
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        let mut type_checker = CodeBlockTypeChecker::new(&f_impl.head.typ, self.functions);
-        visitor::walk_code_block(&mut type_checker, &f_impl.body);
+        CodeBlockTypeChecker::new(&f_impl.head.typ, self.functions).walk(&f_impl.body);
         println!("Function {} typechecked OK.", f_impl.head.name);
     }
+
+    fn finalize(self) {}
 }
 
 #[cfg(test)]
@@ -225,28 +226,22 @@ mod tests {
         program.push_str(input);
 
         let module = module(&program).unwrap().1;
-
-        let mut map_builder = FunctionMapBuilder::new();
-        visitor::walk_module(&mut map_builder, &module);
-
-        let functions = map_builder.get_final_map();
-
-        let mut type_checker = ModuleTypeChecker::new(&functions);
-        visitor::walk_module(&mut type_checker, &module);
+        let functions = FunctionMapBuilder::new().walk(&module);
+        ModuleTypeChecker::new(&functions).walk(&module);
     }
-    
+
     #[test]
     fn test_no_args() {
         typecheck("fn a [ 3 4 + drop ]");
     }
-    
+
     #[test]
     fn test_return() {
         typecheck("fn a -> i32 [ 1 ]");
         typecheck("fn a -> i32 i32 i32 [ 1 2 3 ]");
         typecheck("fn a -> i32 f32 [ 1 1.0 ]");
     }
-    
+
     #[test]
     #[should_panic]
     fn test_bad_return() {
@@ -264,7 +259,7 @@ mod tests {
     fn test_not_enough_return() {
         typecheck("fn a -> f32 i32 [ i32 ]");
     }
-    
+
     #[test]
     fn test_args() {
         typecheck("fn a i32 -> [ drop ]");
@@ -276,7 +271,7 @@ mod tests {
         typecheck("fn a f32 -> f32 [ ]");
         typecheck("fn a i32 f32 bool -> i32 f32 bool [ ]");
     }
-    
+
     #[test]
     fn test_drop() {
         typecheck("fn a [ 3 drop ]");
@@ -285,20 +280,21 @@ mod tests {
         typecheck("fn a [ 3 1.0 drop drop ]");
         typecheck("fn a i32 i32 -> i32 [ drop ]");
     }
-    
+
     #[test]
     fn test_swap() {
         typecheck("fn a i32 f32 -> f32 i32 [ swap ]");
     }
-    
+
     #[test]
     fn test_dup() {
         typecheck("fn a f32 -> f32 f32 [ dup ]");
     }
-    
+
     #[test]
     fn test_generics() {
-        typecheck("
+        typecheck(
+            "
         fn nop 'T -> 'T;
         fn foo 'T 'U 'V -> 'V 'T 'U;
         fn deref *'T -> 'T;
@@ -311,36 +307,37 @@ mod tests {
         
         fn deref3 ***'T -> 'T;
         fn test5 **i32 -> i32 [ ref deref3 ]
-        ")
+        ",
+        )
     }
-    
+
     #[test]
     #[should_panic]
     fn test_undef_generic() {
         // NOTE: undefined generics ('Q) only get caught when the generic is reified/monomorphized
         typecheck("fn a i32 'T 'U -> 'U 'Q 'T bool; fn test [ 1 t f32 drop drop drop drop ]");
     }
-    
+
     #[test]
     #[should_panic]
     fn test_bad_deref() {
         typecheck("fn deref *'T -> 'T; fn test [ 1 deref ]");
     }
-    
+
     #[test]
     fn test_literals() {
         typecheck("fn a -> i32 [ 1 ]");
         typecheck("fn a -> f32 [ 1.0 ]");
         typecheck("fn a -> bool [ t ]");
     }
-    
+
     #[test]
     fn test_call() {
         typecheck("fn a i32 -> f32; fn b i32 -> f32 [ a ]");
         typecheck("fn a i32 i32 -> f32; fn b -> f32 [ 1 2 a ]");
         typecheck("fn a f32 i32 -> f32; fn b -> f32 [ 1.0 2 a ]");
     }
-    
+
     #[test]
     #[should_panic]
     fn test_bad_call_args() {
@@ -352,12 +349,12 @@ mod tests {
     fn test_no_call_args() {
         typecheck("fn a f32 -> ; fn b [ a ]");
     }
-    
+
     #[test]
     fn test_decl_then_impl() {
         typecheck("fn a; fn a [ ]");
     }
-    
+
     #[test]
     #[should_panic]
     fn test_redecl() {
