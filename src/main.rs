@@ -18,17 +18,51 @@ fn main() {
     intrinsic fn drop 'T -> ;
     intrinsic fn swap 'T 'U -> 'U 'T;
     intrinsic fn + i32 i32 -> i32;
+    intrinsic fn - i32 i32 -> i32;
     intrinsic fn < i32 i32 -> bool;
     intrinsic fn = i32 i32 -> bool;
 
-    fn test3 -> i32 i32 i32 [ 10 97 99 ]
-    
     fn main -> [
-        test3 putchar putchar putchar
+        (98 1 test putchar 98 0 test putchar)
     ]
+
+    (fn test i32 i32 -> i32 i32 [
+        1 = if [
+            3 4 + drop 97
+        ] else [
+            9 8 + drop 99
+        ]
+        swap 1 + swap
+    ])
     
-    fn bar i32 i32 -> bool [
-        drop drop f
+    (fn test2 bool -> i32 i32 [
+        1 swap 2 swap if [
+            10 + swap 10 + swap
+        ] else [
+            100 + swap 100 + swap
+        ]
+    ])
+
+    (fn test2 i32 bool -> i32 i32 [
+        99 swap if [
+            10 +
+        ] else [
+            100 +
+        ]
+    ])
+    
+    extern fn test_nested bool bool -> i32;
+    fn test_nested bool bool -> i32 [
+        if [
+            if [
+                111
+            ] else [
+                222
+            ]
+        ] else [
+            drop
+            666
+        ]
     ]
     ";
 

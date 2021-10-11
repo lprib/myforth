@@ -1,3 +1,4 @@
+use std::iter::repeat;
 use std::ptr;
 use std::{collections::HashMap, os::raw::c_char};
 
@@ -147,7 +148,79 @@ impl<'a> ModuleVisitor<()> for ModuleCodeGen<'a> {
     }
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        FunctionCodeGen::new(&mut self.context, &f_impl.head).walk(&f_impl.body);
+        unsafe {
+            // If the function already exists in the generated functions, append to it.
+            // This is the case if there was a forward declaration.
+            let function = if self
+                .context
+                .generated_functions
+                .contains_key(&f_impl.head.name)
+            {
+                self.context.generated_functions[&f_impl.head.name]
+            } else {
+                self.context.create_function_decl(&f_impl.head, false)
+            };
+
+            let entry_bb = LLVMAppendBasicBlockInContext(
+                self.context.context,
+                function.function_value,
+                "entry\0".c_str(),
+            );
+            LLVMPositionBuilderAtEnd(self.context.builder, entry_bb);
+
+            // initial value_stack is the parameters passed to the function
+            let mut params: Vec<LLVMValueRef> = vec![ptr::null_mut(); f_impl.head.typ.inputs.len()];
+            let params_ptr = params.as_mut_ptr();
+            LLVMGetParams(function.function_value, params_ptr);
+
+            // Generate the body of the function as a CodeBlock:
+            // The code block generation takes the function's parameters as it's initial stack
+            let (mut output_stack, _) = CodeBlockCodeGen::new(
+                &mut self.context,
+                function.function_value,
+                params,
+                entry_bb,
+            )
+            .walk(&f_impl.body);
+
+            match f_impl.head.typ.outputs.len() {
+                0 => LLVMBuildRetVoid(self.context.builder),
+                1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap()),
+                _ => {
+                    // Allocate space for the return struct on stack
+                    let return_alloca = LLVMBuildAlloca(
+                        self.context.builder,
+                        self.context.generated_functions[&f_impl.head.name].return_type,
+                        "return_struct_ptr\0".c_str(),
+                    );
+
+                    // Create a GEP and store instruction for each return value
+                    for (i, output_val) in output_stack.into_iter().enumerate() {
+                        let output_ptr = LLVMBuildStructGEP(
+                            self.context.builder,
+                            return_alloca,
+                            i as u32,
+                            "return_value_ptr\0".c_str(),
+                        );
+                        LLVMBuildStore(self.context.builder, output_val, output_ptr);
+                    }
+                    // Load the populated return structure into a value
+                    let return_struct = LLVMBuildLoad(
+                        self.context.builder,
+                        return_alloca,
+                        "return_value\0".c_str(),
+                    );
+
+                    // Return the loaded structure
+                    LLVMBuildRet(self.context.builder, return_struct)
+                }
+            };
+
+            LLVMVerifyFunction(
+                self.context.generated_functions[&f_impl.head.name].function_value,
+                analysis::LLVMVerifierFailureAction::LLVMPrintMessageAction,
+            );
+        }
     }
 
     fn finalize(self) {
@@ -157,44 +230,31 @@ impl<'a> ModuleVisitor<()> for ModuleCodeGen<'a> {
     }
 }
 
-struct FunctionCodeGen<'a, 'b> {
+struct CodeBlockCodeGen<'a, 'b> {
     context: &'a mut Context<'b>,
-    head: &'a FunctionHeader,
+    containing_function: LLVMValueRef,
     value_stack: Vec<LLVMValueRef>,
+    final_bb: LLVMBasicBlockRef,
 }
 
-impl<'a, 'b> FunctionCodeGen<'a, 'b> {
-    fn new(context: &'a mut Context<'b>, head: &'a FunctionHeader) -> Self {
-        unsafe {
-            let function = if context.generated_functions.contains_key(&head.name) {
-                context.generated_functions[&head.name]
-            } else {
-                context.create_function_decl(head, false)
-            };
-
-            let entry_block = LLVMAppendBasicBlockInContext(
-                context.context,
-                function.function_value,
-                "entry\0".c_str(),
-            );
-            LLVMPositionBuilderAtEnd(context.builder, entry_block);
-
-            // initial value_stack is the parameters passed to the function
-            let mut params: Vec<LLVMValueRef> = vec![ptr::null_mut(); head.typ.inputs.len()];
-            let params_ptr = params.as_mut_ptr();
-            LLVMGetParams(function.function_value, params_ptr);
-            let value_stack = params;
-
-            Self {
-                context,
-                head,
-                value_stack,
-            }
+impl<'a, 'b> CodeBlockCodeGen<'a, 'b> {
+    fn new(
+        context: &'a mut Context<'b>,
+        containing_function: LLVMValueRef,
+        value_stack: Vec<LLVMValueRef>,
+        current_final_bb: LLVMBasicBlockRef,
+    ) -> Self {
+        Self {
+            context,
+            containing_function,
+            value_stack,
+            final_bb: current_final_bb,
         }
     }
 }
 
-impl CodeBlockVisitor<()> for FunctionCodeGen<'_, '_> {
+// finalize returns (stack, final BasicBlock)
+impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeGen<'_, '_> {
     fn visit_i32_literal(&mut self, n: i32) {
         unsafe {
             self.value_stack.push(LLVMConstInt(
@@ -228,9 +288,6 @@ impl CodeBlockVisitor<()> for FunctionCodeGen<'_, '_> {
         }
     }
 
-    // send the top n value_stack items to the function.
-    // The result will either be void (no effect), single return (push return to value stack),
-    // or multiple return (create return struct value, unpack all inner values to value_stack)
     fn visit_function(&mut self, name: &str) {
         unsafe {
             if !try_append_intrinsic(self.context, name, &mut self.value_stack) {
@@ -267,34 +324,92 @@ impl CodeBlockVisitor<()> for FunctionCodeGen<'_, '_> {
         }
     }
 
-    fn visit_if_statement(&mut self, _statment: &IfStatement) {
-        todo!()
-    }
-
-    fn visit_while_statement(&mut self, _statment: &WhileStatement) {
-        todo!()
-    }
-
-    fn finalize(mut self) {
+    fn visit_if_statement(&mut self, statement: &IfStatement) {
         unsafe {
-            match self.head.typ.outputs.len() {
-                0 => LLVMBuildRetVoid(self.context.builder),
-                1 => LLVMBuildRet(self.context.builder, self.value_stack.pop().unwrap()),
-                _ => {
-                    // Pack return into return struct
-                    let ret_struct = LLVMConstNamedStruct(
-                        self.context.generated_functions[&self.head.name].return_type,
-                        self.value_stack.as_mut_ptr(),
-                        self.head.typ.outputs.len() as u32,
-                    );
-                    LLVMBuildRet(self.context.builder, ret_struct)
-                }
-            };
-            LLVMVerifyFunction(
-                self.context.generated_functions[&self.head.name].function_value,
-                analysis::LLVMVerifierFailureAction::LLVMPrintMessageAction,
+            let predicate = self.value_stack.pop().unwrap();
+
+            // let if_entry_bb = LLVMAppendBasicBlockInContext(
+            //     self.context.context,
+            //     self.containing_function,
+            //     "if_entry\0".c_str(),
+            // );
+
+            // LLVMBuildBr(self.context.builder, if_entry_bb);
+
+            let true_bb = LLVMAppendBasicBlockInContext(
+                self.context.context,
+                self.containing_function,
+                "if_true_branch\0".c_str(),
             );
+            let false_bb = LLVMAppendBasicBlockInContext(
+                self.context.context,
+                self.containing_function,
+                "if_false_branch\0".c_str(),
+            );
+            let end_bb = LLVMAppendBasicBlockInContext(
+                self.context.context,
+                self.containing_function,
+                "if_finish\0".c_str(),
+            );
+
+            // LLVMPositionBuilderAtEnd(self.context.builder, if_entry_bb);
+            LLVMBuildCondBr(self.context.builder, predicate, true_bb, false_bb);
+
+            LLVMPositionBuilderAtEnd(self.context.builder, true_bb);
+            // Generate true block code
+            let (true_output_stack, mut true_final_bb) = CodeBlockCodeGen::new(
+                self.context,
+                self.containing_function,
+                self.value_stack.to_vec(),
+                true_bb,
+            )
+            .walk(&statement.true_branch);
+            LLVMBuildBr(self.context.builder, end_bb);
+
+            LLVMPositionBuilderAtEnd(self.context.builder, false_bb);
+            // Generate false block code
+            let (false_output_stack, mut false_final_bb) = CodeBlockCodeGen::new(
+                self.context,
+                self.containing_function,
+                self.value_stack.to_vec(),
+                false_bb,
+            )
+            .walk(&statement.false_branch);
+            LLVMBuildBr(self.context.builder, end_bb);
+
+            LLVMPositionBuilderAtEnd(self.context.builder, end_bb);
+            let mut output_stack = Vec::new();
+            for (true_stackval, false_stackval) in
+                true_output_stack.iter().zip(false_output_stack.iter())
+            {
+                let mut true_stackval = *true_stackval;
+                let mut false_stackval = *false_stackval;
+                if true_stackval == false_stackval {
+                    // Both branches didn't touch this value
+                    output_stack.push(true_stackval);
+                } else {
+                    // Branches differ in how they computed the stackval
+
+                    // typechecking ensures that true_stackval and false_stackval will have the
+                    // same type, so we only need to get the type of the true branch's value
+                    let output_type = LLVMTypeOf(true_stackval);
+                    let phi = LLVMBuildPhi(self.context.builder, output_type, "\0".c_str());
+                    LLVMAddIncoming(phi, &mut true_stackval, &mut true_final_bb, 1);
+                    LLVMAddIncoming(phi, &mut false_stackval, &mut false_final_bb, 1);
+                    output_stack.push(phi);
+                }
+            }
+            self.final_bb = end_bb;
+            self.value_stack = output_stack;
         }
+    }
+
+    fn visit_while_statement(&mut self, _statement: &WhileStatement) {
+        todo!()
+    }
+
+    fn finalize(self) -> (Vec<LLVMValueRef>, LLVMBasicBlockRef) {
+        (self.value_stack, self.final_bb)
     }
 }
 
