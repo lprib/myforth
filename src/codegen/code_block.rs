@@ -109,17 +109,17 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
             let predicate = self.value_stack.pop().unwrap();
 
             let true_bb = LLVMAppendBasicBlockInContext(
-                self.context.context,
+                self.context.llvm_context,
                 self.containing_function,
                 "if_true_branch\0".c_str(),
             );
             let false_bb = LLVMAppendBasicBlockInContext(
-                self.context.context,
+                self.context.llvm_context,
                 self.containing_function,
                 "if_false_branch\0".c_str(),
             );
             let end_bb = LLVMAppendBasicBlockInContext(
-                self.context.context,
+                self.context.llvm_context,
                 self.containing_function,
                 "if_finish\0".c_str(),
             );

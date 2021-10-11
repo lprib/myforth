@@ -28,17 +28,6 @@ fn main() {
     fn main [getchar 1 + putchar]
 
     ";
-
-    // let mut gens = HashMap::new();
-    // gens.insert("A".to_string(), Type::Concrete(ConcreteType::F32));
-
-    // let a = Type::Generic("A".to_string());
-    // let b = Type::Concrete(ConcreteType::I32);
-    // let m= a.matches(&b, &mut gens);
-    // println!("{}", m);
-    // println!("{:?}", gens);
-    // std::process::exit(0);
-
     let module = module(test).unwrap().1;
 
     let functions = FunctionMapBuilder::new().walk(&module);

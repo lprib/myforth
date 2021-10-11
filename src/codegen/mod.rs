@@ -18,7 +18,7 @@ pub(super) struct GeneratedFunction {
 }
 
 pub(super) struct Context<'a> {
-    context: LLVMContextRef,
+    llvm_context: LLVMContextRef,
     module: LLVMModuleRef,
     builder: LLVMBuilderRef,
     generated_functions: HashMap<String, GeneratedFunction>,
@@ -29,9 +29,9 @@ impl<'a> Context<'a> {
     pub(super) unsafe fn get_llvm_type(&mut self, typ: &Type) -> LLVMTypeRef {
         match typ {
             Type::Concrete(concrete_type) => match concrete_type {
-                ConcreteType::I32 => LLVMInt32TypeInContext(self.context),
-                ConcreteType::F32 => LLVMBFloatTypeInContext(self.context),
-                ConcreteType::Bool => LLVMInt1TypeInContext(self.context),
+                ConcreteType::I32 => LLVMInt32TypeInContext(self.llvm_context),
+                ConcreteType::F32 => LLVMBFloatTypeInContext(self.llvm_context),
+                ConcreteType::Bool => LLVMInt1TypeInContext(self.llvm_context),
             },
             Type::Generic(_) => todo!(),
             Type::Pointer(_) => todo!("Keep track of reified generic values from typechecking"),
@@ -59,14 +59,14 @@ impl<'a> Context<'a> {
 
     pub(super) unsafe fn create_return_type(&mut self, head: &FunctionHeader) -> LLVMTypeRef {
         match &head.typ.outputs.len() {
-            0 => LLVMVoidTypeInContext(self.context),
+            0 => LLVMVoidTypeInContext(self.llvm_context),
             1 => self.get_llvm_type(&head.typ.outputs[0]),
             _ => {
                 let mut ret_type_name = String::from(&head.name);
                 ret_type_name.push_str("_output");
                 let ret_type_name = ret_type_name.c_str();
                 // Create return structure
-                let ret_struct = LLVMStructCreateNamed(self.context, ret_type_name);
+                let ret_struct = LLVMStructCreateNamed(self.llvm_context, ret_type_name);
 
                 // Fill return structure
                 let mut ret_types = Vec::new();

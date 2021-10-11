@@ -24,23 +24,23 @@ impl FunctionMapBuilder {
 
 // TODO make sure implementation type matches declaration type
 impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
-        if self.functions.contains_key(&f_decl.head.name) {
+    fn visit_decl(&mut self, function: &FunctionDecl) {
+        if self.functions.contains_key(&function.head.name) {
             // TODO "previous declaration at X:X:X"
-            panic!("Attempting to redeclare function {}", &f_decl.head.name);
+            panic!("Attempting to redeclare function {}", &function.head.name);
         }
         self.functions
-            .insert(f_decl.head.name.clone(), (f_decl.head.typ.clone(), false));
+            .insert(function.head.name.clone(), (function.head.typ.clone(), false));
     }
 
-    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        if self.functions.contains_key(&f_impl.head.name) && self.functions[&f_impl.head.name].1 {
+    fn visit_impl(&mut self, function: &FunctionImpl) {
+        if self.functions.contains_key(&function.head.name) && self.functions[&function.head.name].1 {
             // TODO "previous implementation at X:X:X"
-            panic!("Attempting to re-implement function {}", &f_impl.head.name);
+            panic!("Attempting to re-implement function {}", &function.head.name);
         }
 
         self.functions
-            .insert(f_impl.head.name.clone(), (f_impl.head.typ.clone(), true));
+            .insert(function.head.name.clone(), (function.head.typ.clone(), true));
     }
 
     fn finalize(self) -> HashMap<String, FunctionType> {
@@ -255,18 +255,18 @@ impl<'a> ModuleTypeChecker<'a> {
 impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
     fn visit_decl(&mut self, _: &FunctionDecl) {}
 
-    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
+    fn visit_impl(&mut self, function: &FunctionImpl) {
         let return_stack =
-            CodeBlockTypeChecker::new(f_impl.head.typ.inputs.to_vec(), self.functions)
-                .walk(&f_impl.body);
+            CodeBlockTypeChecker::new(function.head.typ.inputs.to_vec(), self.functions)
+                .walk(&function.body);
 
         assert!(
-            return_stack == f_impl.head.typ.outputs,
+            return_stack == function.head.typ.outputs,
             "Expected function to leave {:?} on the stack, instead it left {:?}",
-            f_impl.head.typ.outputs,
+            function.head.typ.outputs,
             return_stack
         );
-        println!("Function {} typechecked OK.", f_impl.head.name);
+        println!("Function {} typechecked OK.", function.head.name);
     }
 
     fn finalize(self) {}

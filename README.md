@@ -38,7 +38,19 @@ extern fn henlo i32 -> i32;
     - General notion of type inheritance for intrinsics
 - [ ] Add spans to parse
 - [ ] Make parsing and typechecking use spans for better error msg
+- [ ] for visitor: make a result_visitor, where each visit function returns a Result<(), TError>
+  - the finalize returns Result<Tsuccess, Terror>.
+  - If any visit fails, return Err,
+  - If all succeed, return result of finalize().
+  - Make error enum for typechecking, with display implementation (with spans)
 - [ ] In typecheck: ensure implementation type matches definition
-- [ ] if/while
-- [ ] parser failing if there is a function at end of module with no whitespace after
-- [ ] walk_n should be a default method on the visitor trait
+- [x] if
+- [ ] while
+- [ ] string literals and pointer intrinsics
+- [ ] array instantiations and indexing
+- [ ] macros and #include (for stdlib/intrinsics include)
+    - Can be done with a separate nom parser
+- [ ] Compile to ASM or just invoke clang each time?
+- [ ] rot, 3grab, 4grab, 5grab
+- [x] parser failing if there is a function at end of module with no whitespace after
+- [x] walk_n should be a default method on the visitor trait

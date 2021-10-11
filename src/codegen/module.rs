@@ -24,7 +24,7 @@ impl<'a> ModuleCodeGen<'a> {
             let context = LLVMContextCreate();
             Self {
                 context: Context {
-                    context,
+                    llvm_context: context,
                     module: LLVMModuleCreateWithNameInContext("main_module\0".c_str(), context),
                     builder: LLVMCreateBuilderInContext(context),
                     generated_functions: HashMap::new(),
@@ -36,55 +36,55 @@ impl<'a> ModuleCodeGen<'a> {
 }
 
 impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
-        if !f_decl.is_intrinsic {
+    fn visit_decl(&mut self, function: &FunctionDecl) {
+        if !function.is_intrinsic {
             unsafe {
                 self.context
-                    .create_function_decl(&f_decl.head, f_decl.is_extern);
+                    .create_function_decl(&function.head, function.is_extern);
             }
         }
     }
 
-    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
+    fn visit_impl(&mut self, function: &FunctionImpl) {
         unsafe {
             // If the function already exists in the generated functions, append to it.
             // This is the case if there was a forward declaration.
-            let function = if self
+            let generated_function = if self
                 .context
                 .generated_functions
-                .contains_key(&f_impl.head.name)
+                .contains_key(&function.head.name)
             {
-                self.context.generated_functions[&f_impl.head.name]
+                self.context.generated_functions[&function.head.name]
             } else {
-                self.context.create_function_decl(&f_impl.head, false)
+                self.context.create_function_decl(&function.head, false)
             };
 
             let entry_bb = LLVMAppendBasicBlockInContext(
-                self.context.context,
-                function.function_value,
+                self.context.llvm_context,
+                generated_function.function_value,
                 "entry\0".c_str(),
             );
             LLVMPositionBuilderAtEnd(self.context.builder, entry_bb);
 
             // initial value_stack is the parameters passed to the function
-            let mut params: Vec<LLVMValueRef> = vec![ptr::null_mut(); f_impl.head.typ.inputs.len()];
+            let mut params: Vec<LLVMValueRef> = vec![ptr::null_mut(); function.head.typ.inputs.len()];
             let params_ptr = params.as_mut_ptr();
-            LLVMGetParams(function.function_value, params_ptr);
+            LLVMGetParams(generated_function.function_value, params_ptr);
 
             // Generate the body of the function as a CodeBlock:
             // The code block generation takes the function's parameters as it's initial stack
             let (mut output_stack, _) =
-                CodeBlockCodeGen::new(&mut self.context, function.function_value, params, entry_bb)
-                    .walk(&f_impl.body);
+                CodeBlockCodeGen::new(&mut self.context, generated_function.function_value, params, entry_bb)
+                    .walk(&function.body);
 
-            match f_impl.head.typ.outputs.len() {
+            match function.head.typ.outputs.len() {
                 0 => LLVMBuildRetVoid(self.context.builder),
                 1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap()),
                 _ => {
                     // Allocate space for the return struct on stack
                     let return_alloca = LLVMBuildAlloca(
                         self.context.builder,
-                        self.context.generated_functions[&f_impl.head.name].return_type,
+                        self.context.generated_functions[&function.head.name].return_type,
                         "return_struct_ptr\0".c_str(),
                     );
 
@@ -111,7 +111,7 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
             };
 
             LLVMVerifyFunction(
-                self.context.generated_functions[&f_impl.head.name].function_value,
+                self.context.generated_functions[&function.head.name].function_value,
                 analysis::LLVMVerifierFailureAction::LLVMPrintMessageAction,
             );
         }

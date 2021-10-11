@@ -77,8 +77,8 @@ pub mod visitor {
     use super::*;
 
     pub trait ModuleVisitor<T> where Self: Sized {
-        fn visit_decl(&mut self, f_decl: &FunctionDecl);
-        fn visit_impl(&mut self, f_impl: &FunctionImpl);
+        fn visit_decl(&mut self, function: &FunctionDecl);
+        fn visit_impl(&mut self, function: &FunctionImpl);
         fn finalize(self) -> T;
         fn walk(mut self, module: &[TopLevelItem]) -> T {
             for top_level_item in module {
