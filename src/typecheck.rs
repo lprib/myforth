@@ -1,9 +1,53 @@
+use core::panic;
 use std::collections::HashMap;
 
 use crate::ast::{
     visitor::{CodeBlockVisitor, ModuleVisitor},
     ConcreteType, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type, WhileStatement,
 };
+
+pub struct FunctionMapBuilder {
+    // Maps name -> (type, is_implemented)
+    functions: HashMap<String, (FunctionType, bool)>,
+}
+
+impl FunctionMapBuilder {
+    pub fn new() -> Self {
+        Self {
+            functions: HashMap::new(),
+        }
+    }
+}
+
+// TODO make sure implementation type matches declaration type
+impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
+    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
+        if self.functions.contains_key(&f_decl.head.name) {
+            // TODO "previous declaration at X:X:X"
+            panic!("Attempting to redeclare function {}", &f_decl.head.name);
+        }
+        self.functions
+            .insert(f_decl.head.name.clone(), (f_decl.head.typ.clone(), false));
+    }
+
+    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
+        if self.functions.contains_key(&f_impl.head.name) && self.functions[&f_impl.head.name].1 {
+            // TODO "previous implementation at X:X:X"
+            panic!("Attempting to re-implement function {}", &f_impl.head.name);
+        }
+
+        self.functions
+            .insert(f_impl.head.name.clone(), (f_impl.head.typ.clone(), true));
+    }
+
+    fn finalize(self) -> HashMap<String, FunctionType> {
+        self.functions
+            .into_iter()
+            // remove bool in tuple
+            .map(|(name, (typ, _))| (name, typ))
+            .collect()
+    }
+}
 
 impl Type {
     /// Checks whether self matches other. If self is a generic, the match always returns true and sets the generic's name to point to it's new reified type in generics_map
@@ -57,21 +101,19 @@ impl Type {
 struct CodeBlockTypeChecker<'a> {
     function_map: &'a HashMap<String, FunctionType>,
     type_stack: Vec<Type>,
-    expected_stack_effect: &'a FunctionType,
 }
 
 impl<'a> CodeBlockTypeChecker<'a> {
-    fn new(self_type: &'a FunctionType, function_map: &'a HashMap<String, FunctionType>) -> Self {
-        let type_stack = self_type.inputs.to_vec();
+    fn new(stack_before: Vec<Type>, function_map: &'a HashMap<String, FunctionType>) -> Self {
         Self {
             function_map,
-            type_stack,
-            expected_stack_effect: self_type,
+            type_stack: stack_before,
         }
     }
 }
 
-impl CodeBlockVisitor<()> for CodeBlockTypeChecker<'_> {
+// TODO this should somehow annotate any generic types with their reified type, to be passed to codegen
+impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
     fn visit_i32_literal(&mut self, _: i32) {
         self.type_stack.push(Type::Concrete(ConcreteType::I32))
     }
@@ -123,64 +165,32 @@ impl CodeBlockVisitor<()> for CodeBlockTypeChecker<'_> {
         }
     }
 
-    fn visit_if_statement(&mut self, _statment: &IfStatement) {
-        todo!()
+    fn visit_if_statement(&mut self, statement: &IfStatement) {
+        match self.type_stack.pop() {
+            None => panic!("Expected a bool value for if statment, but stack was empty"),
+            Some(Type::Concrete(ConcreteType::Bool)) => {}
+            Some(typ) => panic!("Expected a bool value for if statement, got {:?}", typ),
+        }
+        let true_branch = CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
+            .walk(&statement.true_branch);
+        let false_branch = CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
+            .walk(&statement.false_branch);
+
+        assert!(
+            true_branch == false_branch,
+            "If branches should have identical stack effects"
+        );
+
+        // We only need to append the true branch, as both branches are asserted to have identical stack effects above
+        self.type_stack = true_branch;
     }
 
     fn visit_while_statement(&mut self, _statment: &WhileStatement) {
         todo!()
     }
 
-    fn finalize(self) {
-        assert!(
-            self.type_stack == self.expected_stack_effect.outputs,
-            "Expected function to leave {:?} on the stack, instead it left {:?}",
-            self.expected_stack_effect.outputs,
-            self.type_stack
-        );
-    }
-}
-
-pub struct FunctionMapBuilder {
-    // Maps name -> (type, is_implemented)
-    functions: HashMap<String, (FunctionType, bool)>,
-}
-
-impl FunctionMapBuilder {
-    pub fn new() -> Self {
-        Self {
-            functions: HashMap::new(),
-        }
-    }
-}
-
-// TODO make sure implementation type matches declaration type
-impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
-    fn visit_decl(&mut self, f_decl: &FunctionDecl) {
-        if self.functions.contains_key(&f_decl.head.name) {
-            // TODO "previous declaration at X:X:X"
-            panic!("Attempting to redeclare function {}", &f_decl.head.name);
-        }
-        self.functions
-            .insert(f_decl.head.name.clone(), (f_decl.head.typ.clone(), false));
-    }
-
-    fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        if self.functions.contains_key(&f_impl.head.name) && self.functions[&f_impl.head.name].1 {
-            // TODO "previous implementation at X:X:X"
-            panic!("Attempting to re-implement function {}", &f_impl.head.name);
-        }
-
-        self.functions
-            .insert(f_impl.head.name.clone(), (f_impl.head.typ.clone(), true));
-    }
-
-    fn finalize(self) -> HashMap<String, FunctionType> {
-        self.functions
-            .into_iter()
-            // remove bool in tuple
-            .map(|(name, (typ, _))| (name, typ))
-            .collect()
+    fn finalize(self) -> Vec<Type> {
+        self.type_stack
     }
 }
 
@@ -198,7 +208,16 @@ impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
     fn visit_decl(&mut self, _: &FunctionDecl) {}
 
     fn visit_impl(&mut self, f_impl: &FunctionImpl) {
-        CodeBlockTypeChecker::new(&f_impl.head.typ, self.functions).walk(&f_impl.body);
+        let return_stack =
+            CodeBlockTypeChecker::new(f_impl.head.typ.inputs.to_vec(), self.functions)
+                .walk(&f_impl.body);
+
+        assert!(
+            return_stack == f_impl.head.typ.outputs,
+            "Expected function to leave {:?} on the stack, instead it left {:?}",
+            f_impl.head.typ.outputs,
+            return_stack
+        );
         println!("Function {} typechecked OK.", f_impl.head.name);
     }
 
@@ -221,6 +240,9 @@ mod tests {
 
     ";
 
+    // TODO typechecker should return result with error types, so we can make sure #[should_panic]
+    // panics with the right error message
+
     fn typecheck(input: &str) {
         let mut program = String::from(INTRINSICS_DECLS);
         program.push_str(input);
@@ -238,8 +260,8 @@ mod tests {
     #[test]
     fn test_return() {
         typecheck("fn a -> i32 [ 1 ]");
-        typecheck("fn a -> i32 i32 i32 [ 1 2 3 ]");
-        typecheck("fn a -> i32 f32 [ 1 1.0 ]");
+        typecheck("fn b -> i32 i32 i32 [ 1 2 3 ]");
+        typecheck("fn c -> i32 f32 [ 1 1.0 ]");
     }
 
     #[test]
@@ -268,17 +290,17 @@ mod tests {
     #[test]
     fn test_input_output() {
         typecheck("fn a i32 -> i32 [ 1 + ]");
-        typecheck("fn a f32 -> f32 [ ]");
-        typecheck("fn a i32 f32 bool -> i32 f32 bool [ ]");
+        typecheck("fn b f32 -> f32 [ ]");
+        typecheck("fn c i32 f32 bool -> i32 f32 bool [ ]");
     }
 
     #[test]
     fn test_drop() {
         typecheck("fn a [ 3 drop ]");
-        typecheck("fn a [ 1.0 drop ]");
-        typecheck("fn a [ t drop ]");
-        typecheck("fn a [ 3 1.0 drop drop ]");
-        typecheck("fn a i32 i32 -> i32 [ drop ]");
+        typecheck("fn c [ 1.0 drop ]");
+        typecheck("fn b [ t drop ]");
+        typecheck("fn d [ 3 1.0 drop drop ]");
+        typecheck("fn e i32 i32 -> i32 [ drop ]");
     }
 
     #[test]
@@ -327,15 +349,15 @@ mod tests {
     #[test]
     fn test_literals() {
         typecheck("fn a -> i32 [ 1 ]");
-        typecheck("fn a -> f32 [ 1.0 ]");
-        typecheck("fn a -> bool [ t ]");
+        typecheck("fn b -> f32 [ 1.0 ]");
+        typecheck("fn c -> bool [ t ]");
     }
 
     #[test]
     fn test_call() {
-        typecheck("fn a i32 -> f32; fn b i32 -> f32 [ a ]");
-        typecheck("fn a i32 i32 -> f32; fn b -> f32 [ 1 2 a ]");
-        typecheck("fn a f32 i32 -> f32; fn b -> f32 [ 1.0 2 a ]");
+        typecheck("fn a i32 -> f32; fn testa i32 -> f32 [ a ]");
+        typecheck("fn a i32 i32 -> f32; fn testb -> f32 [ 1 2 a ]");
+        typecheck("fn a f32 i32 -> f32; fn testc -> f32 [ 1.0 2 a ]");
     }
 
     #[test]
@@ -365,5 +387,53 @@ mod tests {
     #[should_panic]
     fn test_reimpl() {
         typecheck("fn a [ ] fn a [ ]");
+    }
+
+    #[test]
+    fn test_if() {
+        typecheck("fn a -> [ t if [ ] else [ ] ]");
+        typecheck("fn b -> i32 [ t if [ 1 ] else [ 2 ] ]");
+        typecheck("fn c -> f32 i32 [ t if [ 1.0 1 ] else [ 2.0 2 ] ]");
+        typecheck("fn d -> f32 i32 [ f if [ 1.0 1 ] else [ 1 1.0 swap 1 + ] ]");
+        typecheck("fn e -> i32 [ 1 f if [ 1 + ] else [ drop 1 2 + ] ]");
+    }
+
+    #[test]
+    fn test_nested_if() {
+        typecheck(
+            "
+        fn a [
+            t if [
+                1
+                f if [
+                    1 +
+                ] else [
+                    2 +
+                ]
+            ] else [
+                1 2 +
+            ]
+            drop
+        ]
+        ",
+        );
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_if_use_nonexistant_val() {
+        typecheck("fn a [ t if [ 1 + ] else [ drop ] ]")
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_if_nonequal_branches() {
+        typecheck("fn a [ t if [ 1.0 ] else [ 1 ] drop ] ]")
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_if_no_bool_input() {
+        typecheck("fn a [ 1 if [ ] else [ ] ]");
     }
 }
