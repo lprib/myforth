@@ -110,6 +110,21 @@ impl<'a> CodeBlockTypeChecker<'a> {
             type_stack: stack_before,
         }
     }
+
+    /// Returns the overall effect on the stack of a given operation.  For example (i32) -> (i32)
+    /// has the overall effect of () -> (), since the function will replace the i32 in-place.
+    fn get_stack_effect<'i, 'o>(input: &'i [Type], output: &'o [Type]) -> (&'i [Type], &'o [Type]) {
+        let mut compare_index = 0usize;
+        for (i, o) in input.iter().zip(output.iter()) {
+            if i == o {
+                compare_index += 1;
+            } else {
+                break;
+            }
+        }
+
+        (&input[compare_index..], &output[compare_index..])
+    }
 }
 
 // TODO this should somehow annotate any generic types with their reified type, to be passed to codegen
@@ -185,8 +200,38 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
         self.type_stack = true_branch;
     }
 
-    fn visit_while_statement(&mut self, _statment: &WhileStatement) {
-        todo!()
+    fn visit_while_statement(&mut self, statement: &WhileStatement) {
+        let condition_block_result =
+            CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
+                .walk(&statement.condition);
+        let (effect_in, effect_out) =
+            Self::get_stack_effect(&self.type_stack, &condition_block_result);
+
+        assert!(
+            effect_in.len() == 0,
+            "expected while condition to not consume anything on the stack, instead it consumed {:?}",
+            effect_in
+        );
+        assert!(
+            effect_out == &[Type::Concrete(ConcreteType::Bool)],
+            "expected while condition to produce a bool, instead it produced {:?}",
+            effect_out
+        );
+
+        let body_result = CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
+            .walk(&statement.body);
+        let (effect_in, effect_out) = Self::get_stack_effect(&self.type_stack, &body_result);
+
+        assert!(
+            effect_in.len() == 0,
+            "While body consumes {:?}, it should not consume anything",
+            effect_in
+        );
+        assert!(
+            effect_out.len() == 0,
+            "While body produces {:?}, it should not produce anything",
+            effect_out
+        );
     }
 
     fn finalize(self) -> Vec<Type> {
@@ -237,6 +282,7 @@ mod tests {
         intrinsic fn swap 'T 'U -> 'U 'T;
         intrinsic fn + i32 i32 -> i32;
         intrinsic fn = i32 i32 -> bool;
+        intrinsic fn < i32 i32 -> bool;
 
     ";
 
@@ -435,5 +481,23 @@ mod tests {
     #[should_panic]
     fn test_if_no_bool_input() {
         typecheck("fn a [ 1 if [ ] else [ ] ]");
+    }
+
+    #[test]
+    fn test_while() {
+        typecheck("fn a [ while [ t ] do [ ] ]");
+        typecheck("fn b [ 0 while [ dup 10 < ] do [ 1 + ] drop ]");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_while_not_bool() {
+        typecheck("fn a [ while [ 1 ] do [ ] ]");
+    }
+
+    #[test]
+    #[should_panic]
+    fn test_while_body_has_stack_effect() {
+        typecheck("fn a [ while [ t ] do [ 1 ] ]");
     }
 }

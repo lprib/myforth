@@ -96,8 +96,8 @@ pub mod visitor {
         fn visit_f32_literal(&mut self, n: f32);
         fn visit_bool_literal(&mut self, n: bool);
         fn visit_function(&mut self, name: &str);
-        fn visit_if_statement(&mut self, statment: &IfStatement);
-        fn visit_while_statement(&mut self, statment: &WhileStatement);
+        fn visit_if_statement(&mut self, statement: &IfStatement);
+        fn visit_while_statement(&mut self, statement: &WhileStatement);
         fn finalize(self) -> T;
         fn walk(mut self, block: &CodeBlock) -> T {
             for word in &block.0 {
