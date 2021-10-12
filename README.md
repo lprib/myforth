@@ -54,3 +54,9 @@ extern fn henlo i32 -> i32;
 - [ ] rot, 3grab, 4grab, 5grab
 - [x] parser failing if there is a function at end of module with no whitespace after
 - [x] walk_n should be a default method on the visitor trait
+- [ ] more terse function syntax, better if/while syntax. maybe
+  - bool ? true : false ;
+  - inc i -> i: 1 + ;
+  - rename i32 -> i, f32 -> f. Also ub (uint8) sb (int8), d (double), q (quadword, int64)
+- [ ] typecasts
+- [ ] Compile time inlining (copy tokens)

@@ -283,6 +283,11 @@ unsafe fn try_append_intrinsic(
             value_stack.push(a);
             true
         }
+        "rot" => {
+            let a = value_stack.remove(value_stack.len() - 3);
+            value_stack.push(a);
+            true
+        }
         "dup" => {
             value_stack.push(*value_stack.last().unwrap());
             true

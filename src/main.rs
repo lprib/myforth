@@ -22,6 +22,7 @@ fn main() {
     intrinsic fn drop 'T -> ;
     intrinsic fn over 'T 'U -> 'T 'U 'T;
     intrinsic fn swap 'T 'U -> 'U 'T;
+    intrinsic fn rot 'T 'U 'V -> 'U 'V 'T;
     intrinsic fn + i32 i32 -> i32;
     intrinsic fn - i32 i32 -> i32;
     intrinsic fn * i32 i32 -> i32;
@@ -30,38 +31,38 @@ fn main() {
     intrinsic fn >> i32 i32 -> i32;
     intrinsic fn << i32 i32 -> i32;
     intrinsic fn < i32 i32 -> bool;
+    intrinsic fn <= i32 i32 -> bool;
     intrinsic fn > i32 i32 -> bool;
+    intrinsic fn >= i32 i32 -> bool;
     intrinsic fn = i32 i32 -> bool;
-    
-    (fn main [
-        97 dup 26 + swap while [ dup2 swap < ] do [
-            dup 2 % 0 = if [
-                dup putchar
-            ] else []
-            1 +
-        ] drop drop
-        10 putchar
-    ])
-    
-    (fn main [
-        1 while [dup 30 <] do [
-            dup 1 swap << 
-            1 +
-        ] drop
-    ])
-    
-    fn print i32 ->;
-    
-    fn main [ 123 print ]
     
     fn print i32 -> [
         dup 9 > if [
-            dup 10 / 10 * dup
-            - dup print
+            dup 10 / dup 10 * rot swap - swap print
         ] else []
         48 + putchar
     ]
 
+    fn nl [ 10 putchar ]
+    fn inc i32 -> i32 [ 1 + ]
+    fn dec i32 -> i32 [ 1 + ]
+
+    fn powersof2 [
+        1 while [dup 30 <] do [
+            dup 1 swap << print
+            nl inc
+        ] drop
+    ]
+
+    fn fib i32 -> i32 [
+        dup 1 <= if [ ] else [
+            dup 1 - fib swap 2 - fib +
+        ]
+    ]
+
+    fn main [
+        0 while [ dup 30 < ] do [ dup fib print nl 1 + ] drop
+    ]
     ";
     let module = module(test).unwrap().1;
 

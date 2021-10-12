@@ -30,7 +30,7 @@ impl<'a> Context<'a> {
         match typ {
             Type::Concrete(concrete_type) => match concrete_type {
                 ConcreteType::I32 => LLVMInt32TypeInContext(self.llvm_context),
-                ConcreteType::F32 => LLVMBFloatTypeInContext(self.llvm_context),
+                ConcreteType::F32 => LLVMFloatTypeInContext(self.llvm_context),
                 ConcreteType::Bool => LLVMInt1TypeInContext(self.llvm_context),
             },
             Type::Generic(_) => todo!(),

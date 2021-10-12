@@ -7,5 +7,5 @@ edition = "2018"
 
 [dependencies]
 nom = "7.0"
-llvm-sys = "120"
-    
+llvm-sys = "90"
+# llvm-sys = "120"
