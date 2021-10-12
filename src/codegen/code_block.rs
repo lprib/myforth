@@ -111,17 +111,17 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
             let true_bb = LLVMAppendBasicBlockInContext(
                 self.context.llvm_context,
                 self.containing_function,
-                "if_true_branch\0".c_str(),
+                "if-true-branch\0".c_str(),
             );
             let false_bb = LLVMAppendBasicBlockInContext(
                 self.context.llvm_context,
                 self.containing_function,
-                "if_false_branch\0".c_str(),
+                "if-false-branch\0".c_str(),
             );
             let end_bb = LLVMAppendBasicBlockInContext(
                 self.context.llvm_context,
                 self.containing_function,
-                "if_finish\0".c_str(),
+                "if-finish\0".c_str(),
             );
 
             // LLVMPositionBuilderAtEnd(self.context.builder, if_entry_bb);
@@ -176,8 +176,74 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
         }
     }
 
-    fn visit_while_statement(&mut self, _statement: &WhileStatement) {
-        todo!()
+    fn visit_while_statement(&mut self, statement: &WhileStatement) {
+        unsafe {
+            let condition_bb = LLVMAppendBasicBlockInContext(
+                self.context.llvm_context,
+                self.containing_function,
+                "while-condition\0".c_str(),
+            );
+            let body_bb = LLVMAppendBasicBlockInContext(
+                self.context.llvm_context,
+                self.containing_function,
+                "while-body\0".c_str(),
+            );
+            let end_bb = LLVMAppendBasicBlockInContext(
+                self.context.llvm_context,
+                self.containing_function,
+                "while-finish\0".c_str(),
+            );
+
+            LLVMBuildBr(self.context.builder, condition_bb);
+
+            LLVMPositionBuilderAtEnd(self.context.builder, condition_bb);
+            let mut condition_phis = Vec::new();
+            for entry_stackval in &mut self.value_stack {
+                let phi = LLVMBuildPhi(
+                    self.context.builder,
+                    LLVMTypeOf(*entry_stackval),
+                    "while_phi\0".c_str(),
+                );
+                LLVMAddIncoming(phi, entry_stackval, &mut self.final_bb, 1);
+                condition_phis.push(phi);
+            }
+
+            let (mut condition_output_stack, condition_final_bb) = CodeBlockCodeGen::new(
+                self.context,
+                self.containing_function,
+                condition_phis.to_vec(),
+                condition_bb,
+            )
+            .walk(&statement.condition);
+
+            LLVMPositionBuilderAtEnd(self.context.builder, condition_final_bb);
+            LLVMBuildCondBr(
+                self.context.builder,
+                condition_output_stack.pop().unwrap(),
+                body_bb,
+                end_bb,
+            );
+
+            LLVMPositionBuilderAtEnd(self.context.builder, body_bb);
+            let (mut body_output_stack, mut body_final_bb) = CodeBlockCodeGen::new(
+                self.context,
+                self.containing_function,
+                condition_output_stack,
+                body_bb,
+            )
+            .walk(&statement.body);
+            LLVMBuildBr(self.context.builder, condition_bb);
+
+            // Complete the phi nodes to merge branches from entry and loop body
+            assert!(condition_phis.len() == body_output_stack.len());
+            for (phi, body_stackval) in condition_phis.iter_mut().zip(body_output_stack.iter_mut())
+            {
+                LLVMAddIncoming(*phi, body_stackval, &mut body_final_bb, 1);
+            }
+
+            LLVMPositionBuilderAtEnd(self.context.builder, end_bb);
+            self.final_bb = end_bb;
+        }
     }
 
     fn finalize(self) -> (Vec<LLVMValueRef>, LLVMBasicBlockRef) {
@@ -194,6 +260,10 @@ unsafe fn try_append_intrinsic(
         "+" => binop_intrinsic(LLVMBuildAdd, value_stack, context),
         "-" => binop_intrinsic(LLVMBuildSub, value_stack, context),
         "*" => binop_intrinsic(LLVMBuildMul, value_stack, context),
+        "/" => binop_intrinsic(LLVMBuildSDiv, value_stack, context),
+        "%" => binop_intrinsic(LLVMBuildSRem, value_stack, context),
+        "<<" => binop_intrinsic(LLVMBuildShl, value_stack, context),
+        ">>" => binop_intrinsic(LLVMBuildAShr, value_stack, context),
         "=" => icmp_intrinsic(LLVMIntPredicate::LLVMIntEQ, value_stack, context),
         "!=" => icmp_intrinsic(LLVMIntPredicate::LLVMIntNE, value_stack, context),
         ">" => icmp_intrinsic(LLVMIntPredicate::LLVMIntSGT, value_stack, context),
@@ -209,6 +279,14 @@ unsafe fn try_append_intrinsic(
         }
         "dup" => {
             value_stack.push(*value_stack.last().unwrap());
+            true
+        }
+        "dup2" => {
+            let n = value_stack.len();
+            let a = value_stack[n - 2];
+            let b = value_stack[n - 1];
+            value_stack.push(a);
+            value_stack.push(b);
             true
         }
         "drop" => {

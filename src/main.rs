@@ -18,14 +18,29 @@ fn main() {
     extern fn main -> ;
 
     intrinsic fn dup 'T -> 'T 'T;
+    intrinsic fn dup2 'T 'U -> 'T 'U 'T 'U;
     intrinsic fn drop 'T -> ;
     intrinsic fn swap 'T 'U -> 'U 'T;
     intrinsic fn + i32 i32 -> i32;
     intrinsic fn - i32 i32 -> i32;
+    intrinsic fn * i32 i32 -> i32;
+    intrinsic fn / i32 i32 -> i32;
+    intrinsic fn % i32 i32 -> i32;
+    intrinsic fn >> i32 i32 -> i32;
+    intrinsic fn << i32 i32 -> i32;
     intrinsic fn < i32 i32 -> bool;
+    intrinsic fn > i32 i32 -> bool;
     intrinsic fn = i32 i32 -> bool;
     
-    fn main [getchar 1 + putchar]
+    fn main [
+        97 dup 26 + swap while [ dup2 swap < ] do [
+            dup 2 % 0 = if [
+                dup putchar
+            ] else []
+            1 +
+        ] drop drop
+        10 putchar
+    ]
 
     ";
     let module = module(test).unwrap().1;
@@ -34,7 +49,6 @@ fn main() {
 
     ModuleTypeChecker::new(&functions).walk(&module);
     let module_ir = ModuleCodeGen::new(&functions).walk(&module);
-    println!("MODULE IR: {}", module_ir);
     run_ir(&module_ir);
 }
 

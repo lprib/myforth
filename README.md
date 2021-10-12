@@ -45,7 +45,7 @@ extern fn henlo i32 -> i32;
   - Make error enum for typechecking, with display implementation (with spans)
 - [ ] In typecheck: ensure implementation type matches definition
 - [x] if
-- [ ] while
+- [x] while
 - [ ] string literals and pointer intrinsics
 - [ ] array instantiations and indexing
 - [ ] macros and #include (for stdlib/intrinsics include)
