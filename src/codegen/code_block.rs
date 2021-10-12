@@ -277,6 +277,12 @@ unsafe fn try_append_intrinsic(
             value_stack.push(b);
             true
         }
+        "over" => {
+            let n = value_stack.len();
+            let a = value_stack[n - 2];
+            value_stack.push(a);
+            true
+        }
         "dup" => {
             value_stack.push(*value_stack.last().unwrap());
             true
