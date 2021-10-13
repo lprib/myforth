@@ -92,7 +92,11 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
 
             match function.head.typ.outputs.len() {
                 0 => LLVMBuildRetVoid(self.context.builder),
+
+                // If only a single return, we can just return the value directly
                 1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap().0),
+
+                // If multiple returns, must pack all returned stack items into a struct
                 _ => {
                     // Allocate space for the return struct on stack
                     let return_alloca = LLVMBuildAlloca(

@@ -36,6 +36,7 @@ macro_rules! concrete_type_properties {
     };
 }
 
+// Type properties (is_signed, is_integral, bitwidth) are used in codegen to perform typecasting
 concrete_type_properties! {
     ConcreteType::I32 => true, true, 32;
     ConcreteType::U32 => false, true, 32;
@@ -78,6 +79,9 @@ pub struct WhileStatement {
 #[derive(Debug)]
 pub struct FunctionCall {
     pub name: String,
+    // This is set to None until typechecking. The typechecker annotates each function with
+    // possible generic arguments with the reified types those generics were converted to. This is
+    // used in codegen so that it knows what types are actually produced by the function.
     pub reified_type: Option<FunctionType>,
 }
 

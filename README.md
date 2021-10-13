@@ -61,3 +61,4 @@ extern fn henlo i32 -> i32;
 - [ ] typecasts
 - [ ] Compile time inlining (copy tokens)
 - [ ] proper command line args
+- [ ] stop all the .clone()s!

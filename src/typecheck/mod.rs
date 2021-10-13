@@ -124,7 +124,7 @@ impl<'a> CodeBlockTypeChecker<'a> {
     }
 
     /// Returns the overall effect on the stack of a given operation.  For example (i32) -> (i32)
-    /// has the overall effect of () -> (), since the function will replace the i32 in-place.
+    /// has the overall effect of () -> (), since the function will effectively edit the i32 in-place.
     fn get_stack_effect<'i, 'o>(input: &'i [Type], output: &'o [Type]) -> (&'i [Type], &'o [Type]) {
         let mut compare_index = 0usize;
         for (i, o) in input.iter().zip(output.iter()) {
@@ -139,7 +139,6 @@ impl<'a> CodeBlockTypeChecker<'a> {
     }
 }
 
-// TODO this should somehow annotate any generic types with their reified type, to be passed to codegen
 impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
     fn visit_i32_literal(&mut self, _: i32) {
         self.type_stack.push(Type::Concrete(ConcreteType::I32))
@@ -230,7 +229,8 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
             "If branches should have identical stack effects"
         );
 
-        // We only need to append the true branch, as both branches are asserted to have identical stack effects above
+        // We only need to append the true branch's stack output, as both branches are asserted to
+        // have identical stack effects above
         self.type_stack = true_branch;
     }
 

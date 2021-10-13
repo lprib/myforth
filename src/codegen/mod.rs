@@ -12,6 +12,8 @@ use llvm::prelude::*;
 use llvm::*;
 use llvm_sys as llvm;
 
+// Holds the current stack of LLVM values and their reified types (used for
+// monomorphization of generics)
 type CompilationStack = Vec<(LLVMValueRef, Type)>;
 
 #[derive(Clone, Copy)]
@@ -24,7 +26,10 @@ pub(super) struct Context<'a> {
     llvm_context: LLVMContextRef,
     module: LLVMModuleRef,
     builder: LLVMBuilderRef,
+    // Used to refer to previously generated functions in call instructions
     generated_functions: HashMap<String, GeneratedFunction>,
+    // Used to get the input/output type of functions so that their
+    // CompilationStack can be properly generated
     functions: &'a HashMap<String, FunctionType>,
 }
 
