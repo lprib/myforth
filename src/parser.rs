@@ -59,7 +59,7 @@ fn word_if_statement(input: &str) -> PResult<Word> {
 }
 
 fn word_while_statement(input: &str) -> PResult<Word> {
-    map(while_statement, Word::WhilteStatement)(input)
+    map(while_statement, Word::WhileStatement)(input)
 }
 
 fn word(input: &str) -> PResult<Word> {
@@ -124,7 +124,7 @@ macro_rules! concrete_type_parser {
 }
 
 fn concrete_type(input: &str) -> PResult<Type> {
-    concrete_type_parser!{
+    concrete_type_parser! {
         input,
         "i" => ConcreteType::I32,
         "ui" => ConcreteType::U32,
@@ -325,7 +325,7 @@ mod tests {
         function_impl("a b->i : ? 1 : 2 ;;").test()?;
         function_impl("a -> : 3 4 = ? 1 : 2 ; drop ;").test()
     }
-    
+
     #[test]
     fn testwhile() -> TestResult {
         while_statement("@ t : ;").test()?;
