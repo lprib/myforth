@@ -24,7 +24,7 @@ fn comment(input: &str) -> PResult<&str> {
 }
 
 fn word_text(input: &str) -> PResult<String> {
-    map(recognize(many1(none_of(" []()\t\r\n;"))), String::from)(input)
+    map(recognize(many1(none_of(" ()\t\r\n:;?@"))), String::from)(input)
 }
 
 fn word_function_call(input: &str) -> PResult<Word> {
@@ -79,25 +79,19 @@ fn words(input: &str) -> PResult<Vec<Word>> {
 }
 
 fn code_block(input: &str) -> PResult<CodeBlock> {
-    map(
-        delimited(
-            pair(char('['), maybe_whitespace),
-            words,
-            pair(maybe_whitespace, char(']')),
-        ),
-        CodeBlock,
-    )(input)
+    map(words, CodeBlock)(input)
 }
 
 fn if_statement(input: &str) -> PResult<IfStatement> {
     map(
         tuple((
-            terminated(tag("if"), whitespace),
-            terminated(code_block, whitespace),
-            terminated(tag("else"), whitespace),
-            code_block,
+            terminated(char('?'), whitespace),
+            terminated(code_block, maybe_whitespace),
+            terminated(char(':'), whitespace),
+            terminated(code_block, maybe_whitespace),
+            char(';'),
         )),
-        |(_, true_branch, _, false_branch)| IfStatement {
+        |(_, true_branch, _, false_branch, _)| IfStatement {
             true_branch,
             false_branch,
         },
@@ -107,22 +101,23 @@ fn if_statement(input: &str) -> PResult<IfStatement> {
 fn while_statement(input: &str) -> PResult<WhileStatement> {
     map(
         tuple((
-            terminated(tag("while"), whitespace),
-            terminated(code_block, whitespace),
-            terminated(tag("do"), whitespace),
-            code_block,
+            terminated(char('@'), whitespace),
+            terminated(code_block, maybe_whitespace),
+            terminated(tag(":"), whitespace),
+            terminated(code_block, maybe_whitespace),
+            char(';'),
         )),
-        |(_, condition, _, body)| WhileStatement { condition, body },
+        |(_, condition, _, body, _)| WhileStatement { condition, body },
     )(input)
 }
 
 fn concrete_type(input: &str) -> PResult<Type> {
-    let (input, typ) = alt((tag("i32"), tag("f32"), tag("bool")))(input)?;
+    let (input, typ) = alt((tag("i"), tag("f"), tag("b")))(input)?;
 
     match typ {
-        "i32" => Ok((input, Type::Concrete(ConcreteType::I32))),
-        "f32" => Ok((input, Type::Concrete(ConcreteType::F32))),
-        "bool" => Ok((input, Type::Concrete(ConcreteType::Bool))),
+        "i" => Ok((input, Type::Concrete(ConcreteType::I32))),
+        "f" => Ok((input, Type::Concrete(ConcreteType::F32))),
+        "b" => Ok((input, Type::Concrete(ConcreteType::Bool))),
         _ => unreachable!(),
     }
 }
@@ -167,12 +162,8 @@ fn function_type(input: &str) -> PResult<FunctionType> {
 // TODO the lack of whitespace in this `fn a;` makes it not parse
 fn function_header(input: &str) -> PResult<FunctionHeader> {
     map(
-        tuple((
-            terminated(tag("fn"), whitespace),
-            terminated(word_text, maybe_whitespace),
-            function_type,
-        )),
-        |(_, name, typ)| FunctionHeader { name, typ },
+        tuple((terminated(word_text, maybe_whitespace), function_type)),
+        |(name, typ)| FunctionHeader { name, typ },
     )(input)
 }
 
@@ -194,8 +185,13 @@ fn function_decl(input: &str) -> PResult<FunctionDecl> {
 
 fn function_impl(input: &str) -> PResult<FunctionImpl> {
     map(
-        tuple((terminated(function_header, maybe_whitespace), code_block)),
-        |(head, body)| FunctionImpl { head, body },
+        tuple((
+            terminated(function_header, maybe_whitespace),
+            terminated(char(':'), maybe_whitespace),
+            code_block,
+            preceded(maybe_whitespace, char(';')),
+        )),
+        |(head, _, body, _)| FunctionImpl { head, body },
     )(input)
 }
 
@@ -250,39 +246,45 @@ mod tests {
 
     #[test]
     fn test_impl() -> TestResult {
-        top_level_item("fn foo -> [ ]").test()?;
-        top_level_item("fn foo -> []").test()?;
-        top_level_item("fn foo i32 -> i32 [ ]").test()?;
-        top_level_item("fn foo i32 -> [ ]").test()?;
-        top_level_item("fn foo -> i32 [ ]").test()?;
-        top_level_item("fn foo i32 f32 bool -> i32 [ ]").test()?;
-        top_level_item("fn foo 'Typ 'Typ2 *'Typ i32 f32 bool -> 'Typ 'Typ2 *'Typ i32 f32 bool [ ]")
-            .test()?;
-        top_level_item("fn foo [ ]").test()
+        top_level_item("foo: ;").test()?;
+        top_level_item("foo:;").test()?;
+        top_level_item("foo :;").test()?;
+        top_level_item("foo i -> i : ;").test()?;
+        top_level_item("foo i -> i: ;").test()?;
+        top_level_item("foo i -> :;").test()?;
+        top_level_item("foo -> i :;").test()?;
+        top_level_item("foo i f b -> i :;").test()?;
+        top_level_item("foo 'Typ 'Typ2 *'Typ i f b -> 'Typ 'Typ2 *'Typ i f b:;").test()
+    }
+
+    #[test]
+    fn test_fn_type() -> TestResult {
+        function_type("i -> i").test()
     }
 
     #[test]
     fn test_decl() -> TestResult {
-        top_level_item("fn foo ;").test()?;
-        top_level_item("fn foo -> ;").test()?;
-        top_level_item("fn foo i32 -> i32 ;").test()?;
-        top_level_item("fn foo i32 -> ;").test()?;
-        top_level_item("fn foo -> i32 ;").test()?;
-        top_level_item("fn foo i32 f32 bool -> i32 ;").test()?;
-        top_level_item("fn foo 'Typ 'Typ2 *'Typ i32 f32 bool -> 'Typ 'Typ2 *'Typ i32 f32 bool ;")
-            .test()?;
-        top_level_item("fn foo;").test()?;
-        top_level_item("fn foo ->;").test()?;
-        top_level_item("fn foo -> i32;").test()?;
-        top_level_item("fn foo i32 ->;").test()?;
-        top_level_item("fn foo i32 -> i32;").test()
+        top_level_item("foo ;").test()?;
+        top_level_item("foo;").test()?;
+        top_level_item("extern foo;").test()?;
+        top_level_item("foo -> ;").test()?;
+        top_level_item("intrinsic foo i -> i ;").test()?;
+        top_level_item("extern foo i -> ;").test()?;
+        top_level_item("foo -> i ;").test()?;
+        top_level_item("foo i f b -> i ;").test()?;
+        top_level_item("foo 'Typ 'Typ2 *'Typ i f b -> 'Typ 'Typ2 *'Typ i f b;").test()?;
+        top_level_item("foo;").test()?;
+        top_level_item("foo ->;").test()?;
+        top_level_item("foo -> i;").test()?;
+        top_level_item("foo i ->;").test()?;
+        top_level_item("foo i -> i;").test()
     }
 
     #[test]
     fn test_module() -> TestResult {
-        module("fn a; fn b;").test()?;
-        module("fn a;").test()?;
-        module(" fn a; fn b; ").test()?;
+        module("a; b;").test()?;
+        module("a;").test()?;
+        module(" a; b; ").test()?;
         module("").test()?;
         module("(comment)").test()
     }
@@ -297,6 +299,19 @@ mod tests {
         maybe_whitespace("(comment)(comment)").test()?;
         maybe_whitespace("").test()
     }
+
+    #[test]
+    fn test_if() -> TestResult {
+        if_statement("? : ;").test()?;
+        if_statement("? dup 3 + : dup 4 + ;").test()?;
+        function_impl("a b->i : ? 1 : 2 ;;").test()?;
+        function_impl("a -> : 3 4 = ? 1 : 2 ; drop ;").test()
+    }
     
-    //TODO test if, while, literal parsing
+    #[test]
+    fn testwhile() -> TestResult {
+        while_statement("@ t : ;").test()?;
+        while_statement("@ 3 4 = : dup print ;").test()?;
+        function_impl("a b->i : drop 0 @ dup 10 < : 1 + ; ;").test()
+    }
 }

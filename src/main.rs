@@ -43,6 +43,13 @@ fn main() {
         48 + putchar
     ]
 
+    fn print i32 -> [
+        dup 9 > ?
+            dup 10 / dup 10 * rot swap - swap print
+        : ;
+        48 + putchar
+    ]
+
     fn nl [ 10 putchar ]
     fn inc i32 -> i32 [ 1 + ]
     fn dec i32 -> i32 [ 1 + ]

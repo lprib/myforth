@@ -60,3 +60,4 @@ extern fn henlo i32 -> i32;
   - rename i32 -> i, f32 -> f. Also ub (uint8) sb (int8), d (double), q (quadword, int64)
 - [ ] typecasts
 - [ ] Compile time inlining (copy tokens)
+- [ ] proper command line args
