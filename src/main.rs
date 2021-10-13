@@ -29,12 +29,16 @@ fn main() {
 
     nl : 10 putchar ;
     inc i -> i : 1 + ;
-    dec i -> i : 1 + ;
+    dec i -> i : 1 - ;
 
     powersof2 :
         1 @ dup 30 < :
             dup 1 swap << print nl
             inc
+        ;
+        @ dup 1 > :
+            dup 1 swap << print nl
+            dec
         ; drop
     ;
 
@@ -48,16 +52,15 @@ fn main() {
         0 @ dup 20 < : dup fib print nl 1 + ; drop
     ;
 
-    main : fibs powersof2 ;
+    main : powersof2 ;
     ");
-    let test = "a 'T 'U -> 'U; b -> f : t 4.0 a ;";
     let mut module = module(test).unwrap().1;
 
     let functions = FunctionMapBuilder::new().walk(&mut module);
 
-    println!("BEFORE_AST: {:#?}", &module);
+    // println!("BEFORE_AST: {:#?}", &module);
     ModuleTypeChecker::new(&functions).walk(&mut module);
-    println!("AFTER_AST: {:#?}", &module);
+    // println!("AFTER_AST: {:#?}", &module);
     let module_ir = ModuleCodeGen::new(&functions).walk(&mut module);
     run_ir(&module_ir);
 }

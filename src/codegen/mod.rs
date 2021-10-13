@@ -12,6 +12,8 @@ use llvm::prelude::*;
 use llvm::*;
 use llvm_sys as llvm;
 
+type CompilationStack = Vec<(LLVMValueRef, Type)>;
+
 #[derive(Clone, Copy)]
 pub(super) struct GeneratedFunction {
     function_value: LLVMValueRef,

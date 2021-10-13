@@ -67,19 +67,28 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
             LLVMPositionBuilderAtEnd(self.context.builder, entry_bb);
 
             // initial value_stack is the parameters passed to the function
-            let mut params: Vec<LLVMValueRef> = vec![ptr::null_mut(); function.head.typ.inputs.len()];
+            let mut params: Vec<LLVMValueRef> =
+                vec![ptr::null_mut(); function.head.typ.inputs.len()];
             let params_ptr = params.as_mut_ptr();
             LLVMGetParams(generated_function.function_value, params_ptr);
+            let params = params
+                .into_iter()
+                .zip(function.head.typ.inputs.iter().cloned())
+                .collect();
 
             // Generate the body of the function as a CodeBlock:
             // The code block generation takes the function's parameters as it's initial stack
-            let (mut output_stack, _) =
-                CodeBlockCodeGen::new(&mut self.context, generated_function.function_value, params, entry_bb)
-                    .walk(&mut function.body);
+            let (mut output_stack, _) = CodeBlockCodeGen::new(
+                &mut self.context,
+                generated_function.function_value,
+                params,
+                entry_bb,
+            )
+            .walk(&mut function.body);
 
             match function.head.typ.outputs.len() {
                 0 => LLVMBuildRetVoid(self.context.builder),
-                1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap()),
+                1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap().0),
                 _ => {
                     // Allocate space for the return struct on stack
                     let return_alloca = LLVMBuildAlloca(
@@ -96,7 +105,7 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
                             i as u32,
                             "return_value_ptr\0".c_str(),
                         );
-                        LLVMBuildStore(self.context.builder, output_val, output_ptr);
+                        LLVMBuildStore(self.context.builder, output_val.0, output_ptr);
                     }
                     // Load the populated return structure into a value
                     let return_struct = LLVMBuildLoad(
