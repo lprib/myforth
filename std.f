@@ -1,0 +1,18 @@
+intrinsic dup 'T -> 'T 'T;
+intrinsic dup2 'T 'U -> 'T 'U 'T 'U;
+intrinsic drop 'T -> ;
+intrinsic over 'T 'U -> 'T 'U 'T;
+intrinsic swap 'T 'U -> 'U 'T;
+intrinsic rot 'T 'U 'V -> 'U 'V 'T;
+intrinsic + i i -> i;
+intrinsic - i i -> i;
+intrinsic * i i -> i;
+intrinsic / i i -> i;
+intrinsic % i i -> i;
+intrinsic >> i i -> i;
+intrinsic << i i -> i;
+intrinsic < i i -> b;
+intrinsic <= i i -> b;
+intrinsic > i i -> b;
+intrinsic >= i i -> b;
+intrinsic = i i -> b;

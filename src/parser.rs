@@ -20,11 +20,11 @@ fn maybe_whitespace(input: &str) -> PResult<&str> {
 }
 
 fn comment(input: &str) -> PResult<&str> {
-    delimited(char('('), take_until(")"), char(')'))(input)
+    delimited(char('['), take_until("]"), char(']'))(input)
 }
 
 fn word_text(input: &str) -> PResult<String> {
-    map(recognize(many1(none_of(" ()\t\r\n:;?@"))), String::from)(input)
+    map(recognize(many1(none_of(" []\t\r\n:;?@"))), String::from)(input)
 }
 
 fn word_function_call(input: &str) -> PResult<Word> {
@@ -286,17 +286,18 @@ mod tests {
         module("a;").test()?;
         module(" a; b; ").test()?;
         module("").test()?;
-        module("(comment)").test()
+        module("[comment]").test()
     }
 
     #[test]
     fn test_whitespace() -> TestResult {
         whitespace(" ").test()?;
-        whitespace(" \t\n(co\nmment) ").test()?;
-        whitespace("(comment)(com \r\nm\rent)").test()?;
+        whitespace("[comment]").test()?;
+        whitespace(" \t\n[co\nmment] ").test()?;
+        whitespace("[comment][com \r\nm\rent]").test()?;
         maybe_whitespace(" ").test()?;
-        maybe_whitespace(" \t\n(comment) ").test()?;
-        maybe_whitespace("(comment)(comment)").test()?;
+        maybe_whitespace(" \t\n[comment] ").test()?;
+        maybe_whitespace("[comment][comment]").test()?;
         maybe_whitespace("").test()
     }
 
@@ -304,6 +305,7 @@ mod tests {
     fn test_if() -> TestResult {
         if_statement("? : ;").test()?;
         if_statement("? dup 3 + : dup 4 + ;").test()?;
+        if_statement("? dup 3 + print : ;").test()?;
         function_impl("a b->i : ? 1 : 2 ;;").test()?;
         function_impl("a -> : 3 4 = ? 1 : 2 ; drop ;").test()
     }

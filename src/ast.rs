@@ -2,7 +2,13 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ConcreteType {
     I32,
+    U32,
     F32,
+    F64,
+    U64,
+    I64,
+    U8,
+    I8,
     Bool,
 }
 

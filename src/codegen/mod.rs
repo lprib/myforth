@@ -29,12 +29,15 @@ impl<'a> Context<'a> {
     pub(super) unsafe fn get_llvm_type(&mut self, typ: &Type) -> LLVMTypeRef {
         match typ {
             Type::Concrete(concrete_type) => match concrete_type {
-                ConcreteType::I32 => LLVMInt32TypeInContext(self.llvm_context),
+                ConcreteType::I8 | ConcreteType::U8 => LLVMInt8TypeInContext(self.llvm_context),
+                ConcreteType::I32 | ConcreteType::U32 => LLVMInt32TypeInContext(self.llvm_context),
+                ConcreteType::I64 | ConcreteType::U64=> todo!(),
                 ConcreteType::F32 => LLVMFloatTypeInContext(self.llvm_context),
+                ConcreteType::F64 => LLVMDoubleTypeInContext(self.llvm_context),
                 ConcreteType::Bool => LLVMInt1TypeInContext(self.llvm_context),
             },
-            Type::Generic(_) => todo!(),
-            Type::Pointer(_) => todo!("Keep track of reified generic values from typechecking"),
+            Type::Generic(_) => todo!("Should get the reified type here!"),
+            Type::Pointer(inner) => LLVMPointerType(self.get_llvm_type(inner), 0)
         }
     }
 

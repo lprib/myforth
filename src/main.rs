@@ -12,65 +12,44 @@ mod parser;
 mod typecheck;
 
 fn main() {
-    let test = "
-    extern fn putchar i32 -> ;
-    extern fn getchar -> i32;
-    extern fn main -> ;
+    let test = 
+    concat!(
+    include_str!("../std.f"),
+    "
+    extern putchar i -> ;
+    extern getchar -> i;
+    extern main -> ;
 
-    intrinsic fn dup 'T -> 'T 'T;
-    intrinsic fn dup2 'T 'U -> 'T 'U 'T 'U;
-    intrinsic fn drop 'T -> ;
-    intrinsic fn over 'T 'U -> 'T 'U 'T;
-    intrinsic fn swap 'T 'U -> 'U 'T;
-    intrinsic fn rot 'T 'U 'V -> 'U 'V 'T;
-    intrinsic fn + i32 i32 -> i32;
-    intrinsic fn - i32 i32 -> i32;
-    intrinsic fn * i32 i32 -> i32;
-    intrinsic fn / i32 i32 -> i32;
-    intrinsic fn % i32 i32 -> i32;
-    intrinsic fn >> i32 i32 -> i32;
-    intrinsic fn << i32 i32 -> i32;
-    intrinsic fn < i32 i32 -> bool;
-    intrinsic fn <= i32 i32 -> bool;
-    intrinsic fn > i32 i32 -> bool;
-    intrinsic fn >= i32 i32 -> bool;
-    intrinsic fn = i32 i32 -> bool;
-    
-    fn print i32 -> [
-        dup 9 > if [
-            dup 10 / dup 10 * rot swap - swap print
-        ] else []
-        48 + putchar
-    ]
-
-    fn print i32 -> [
+    print i -> :
         dup 9 > ?
             dup 10 / dup 10 * rot swap - swap print
         : ;
         48 + putchar
-    ]
+    ;
 
-    fn nl [ 10 putchar ]
-    fn inc i32 -> i32 [ 1 + ]
-    fn dec i32 -> i32 [ 1 + ]
+    nl : 10 putchar ;
+    inc i -> i : 1 + ;
+    dec i -> i : 1 + ;
 
-    fn powersof2 [
-        1 while [dup 30 <] do [
-            dup 1 swap << print
-            nl inc
-        ] drop
-    ]
+    powersof2 :
+        1 @ dup 30 < :
+            dup 1 swap << print nl
+            inc
+        ; drop
+    ;
 
-    fn fib i32 -> i32 [
-        dup 1 <= if [ ] else [
+    fib i->i :
+        dup 1 <= ? :
             dup 1 - fib swap 2 - fib +
-        ]
-    ]
+        ;
+    ;
+    
+    fibs:
+        0 @ dup 20 < : dup fib print nl 1 + ; drop
+    ;
 
-    fn main [
-        0 while [ dup 30 < ] do [ dup fib print nl 1 + ] drop
-    ]
-    ";
+    main : fibs powersof2 ;
+    ");
     let module = module(test).unwrap().1;
 
     let functions = FunctionMapBuilder::new().walk(&module);

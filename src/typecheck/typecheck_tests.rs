@@ -2,22 +2,11 @@
 
     use super::*;
 
-    const INTRINSICS_DECLS: &'static str = "
-
-        intrinsic dup 'T -> 'T 'T;
-        intrinsic drop 'T -> ;
-        intrinsic swap 'T 'U -> 'U 'T;
-        intrinsic + i i -> i;
-        intrinsic = i i -> b;
-        intrinsic < i i -> b;
-
-    ";
-
     // TODO typechecker should return result with error types, so we can make sure #[should_panic]
     // panics with the right error message
 
     fn typecheck(input: &str) {
-        let mut program = String::from(INTRINSICS_DECLS);
+        let mut program = String::from(include_str!("../../std.f"));
         program.push_str(input);
 
         let module = module(&program).unwrap().1;
