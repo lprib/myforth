@@ -111,14 +111,30 @@ fn while_statement(input: &str) -> PResult<WhileStatement> {
     )(input)
 }
 
-fn concrete_type(input: &str) -> PResult<Type> {
-    let (input, typ) = alt((tag("i"), tag("f"), tag("b")))(input)?;
+macro_rules! concrete_type_parser {
+    ($input:expr, $($name:literal => $type:expr),*) => {
+        let (input, typ) = alt(( $(tag($name)),* ))($input)?;
+        match typ {
+            $(
+                $name => Ok((input, Type::Concrete($type))),
+            )*
+            _ => unreachable!(),
+        }
+    };
+}
 
-    match typ {
-        "i" => Ok((input, Type::Concrete(ConcreteType::I32))),
-        "f" => Ok((input, Type::Concrete(ConcreteType::F32))),
-        "b" => Ok((input, Type::Concrete(ConcreteType::Bool))),
-        _ => unreachable!(),
+fn concrete_type(input: &str) -> PResult<Type> {
+    concrete_type_parser!{
+        input,
+        "i" => ConcreteType::I32,
+        "ui" => ConcreteType::U32,
+        "f" => ConcreteType::F32,
+        "d" => ConcreteType::F64,
+        "q" => ConcreteType::I64,
+        "uq" => ConcreteType::U64,
+        "c" => ConcreteType::I8,
+        "uc" => ConcreteType::U8,
+        "b" => ConcreteType::Bool
     }
 }
 
