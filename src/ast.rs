@@ -12,6 +12,42 @@ pub enum ConcreteType {
     Bool,
 }
 
+macro_rules! concrete_type_properties {
+    ($($type:pat => $is_signed:expr, $is_integral:expr, $width:expr;)*) => {
+        impl ConcreteType {
+            fn is_signed(&self) -> bool {
+                match self {
+                    $($type => $is_signed,)*
+                }
+            }
+
+            fn is_integral(&self) -> bool {
+                match self {
+                    $($type => $is_integral,)*
+                }
+            }
+
+            fn width(&self) -> u32 {
+                match self {
+                    $($type => $width,)*
+                }
+            }
+        }
+    };
+}
+
+concrete_type_properties! {
+    ConcreteType::I32 => true, true, 32;
+    ConcreteType::U32 => false, true, 32;
+    ConcreteType::F32 => true, false, 32;
+    ConcreteType::F64 => true, false, 64;
+    ConcreteType::I64 => true, true, 64;
+    ConcreteType::U64 => false, true, 64;
+    ConcreteType::I8 => true, true, 8;
+    ConcreteType::U8 => false, true, 8;
+    ConcreteType::Bool => false, true, 1;
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Type {
     Concrete(ConcreteType),
@@ -82,7 +118,10 @@ pub enum TopLevelItem {
 pub mod visitor {
     use super::*;
 
-    pub trait ModuleVisitor<T> where Self: Sized {
+    pub trait ModuleVisitor<T>
+    where
+        Self: Sized,
+    {
         fn visit_decl(&mut self, function: &FunctionDecl);
         fn visit_impl(&mut self, function: &FunctionImpl);
         fn finalize(self) -> T;
@@ -97,7 +136,10 @@ pub mod visitor {
         }
     }
 
-    pub trait CodeBlockVisitor<T> where Self: Sized {
+    pub trait CodeBlockVisitor<T>
+    where
+        Self: Sized,
+    {
         fn visit_i32_literal(&mut self, n: i32);
         fn visit_f32_literal(&mut self, n: f32);
         fn visit_bool_literal(&mut self, n: bool);

@@ -1,4 +1,5 @@
 mod code_block;
+mod intrinsics;
 pub mod module;
 
 use std::{collections::HashMap, os::raw::c_char};

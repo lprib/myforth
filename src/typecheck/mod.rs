@@ -29,18 +29,26 @@ impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
             // TODO "previous declaration at X:X:X"
             panic!("Attempting to redeclare function {}", &function.head.name);
         }
-        self.functions
-            .insert(function.head.name.clone(), (function.head.typ.clone(), false));
+        self.functions.insert(
+            function.head.name.clone(),
+            (function.head.typ.clone(), false),
+        );
     }
 
     fn visit_impl(&mut self, function: &FunctionImpl) {
-        if self.functions.contains_key(&function.head.name) && self.functions[&function.head.name].1 {
+        if self.functions.contains_key(&function.head.name) && self.functions[&function.head.name].1
+        {
             // TODO "previous implementation at X:X:X"
-            panic!("Attempting to re-implement function {}", &function.head.name);
+            panic!(
+                "Attempting to re-implement function {}",
+                &function.head.name
+            );
         }
 
-        self.functions
-            .insert(function.head.name.clone(), (function.head.typ.clone(), true));
+        self.functions.insert(
+            function.head.name.clone(),
+            (function.head.typ.clone(), true),
+        );
     }
 
     fn finalize(self) -> HashMap<String, FunctionType> {
