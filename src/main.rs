@@ -12,10 +12,9 @@ mod parser;
 mod typecheck;
 
 fn main() {
-    let test = 
-    concat!(
-    include_str!("../std.f"),
-    "
+    let test = concat!(
+        include_str!("../std.f"),
+        "
     extern putchar i -> ;
     extern getchar -> i;
     extern main -> ;
@@ -53,14 +52,15 @@ fn main() {
     ;
 
     main : powersof2 ;
-    ");
+    "
+    );
     let mut module = module(test).unwrap().1;
 
     let functions = FunctionMapBuilder::new().walk(&mut module);
 
     // println!("BEFORE_AST: {:#?}", &module);
     ModuleTypeChecker::new(&functions).walk(&mut module);
-    // println!("AFTER_AST: {:#?}", &module);
+    println!("AFTER_AST: {:#?}", &module);
     let module_ir = ModuleCodeGen::new(&functions).walk(&mut module);
     run_ir(&module_ir);
 }

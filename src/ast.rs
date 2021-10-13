@@ -15,19 +15,19 @@ pub enum ConcreteType {
 macro_rules! concrete_type_properties {
     ($($type:pat => $is_signed:expr, $is_integral:expr, $width:expr;)*) => {
         impl ConcreteType {
-            fn is_signed(&self) -> bool {
+            pub fn is_signed(&self) -> bool {
                 match self {
                     $($type => $is_signed,)*
                 }
             }
 
-            fn is_integral(&self) -> bool {
+            pub fn is_integral(&self) -> bool {
                 match self {
                     $($type => $is_integral,)*
                 }
             }
 
-            fn width(&self) -> u32 {
+            pub fn width(&self) -> u32 {
                 match self {
                     $($type => $width,)*
                 }

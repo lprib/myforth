@@ -34,13 +34,13 @@ impl<'a> Context<'a> {
             Type::Concrete(concrete_type) => match concrete_type {
                 ConcreteType::I8 | ConcreteType::U8 => LLVMInt8TypeInContext(self.llvm_context),
                 ConcreteType::I32 | ConcreteType::U32 => LLVMInt32TypeInContext(self.llvm_context),
-                ConcreteType::I64 | ConcreteType::U64=> todo!(),
+                ConcreteType::I64 | ConcreteType::U64 => LLVMInt64TypeInContext(self.llvm_context),
                 ConcreteType::F32 => LLVMFloatTypeInContext(self.llvm_context),
                 ConcreteType::F64 => LLVMDoubleTypeInContext(self.llvm_context),
                 ConcreteType::Bool => LLVMInt1TypeInContext(self.llvm_context),
             },
             Type::Generic(_) => todo!("Should get the reified type here!"),
-            Type::Pointer(inner) => LLVMPointerType(self.get_llvm_type(inner), 0)
+            Type::Pointer(inner) => LLVMPointerType(self.get_llvm_type(inner), 0),
         }
     }
 

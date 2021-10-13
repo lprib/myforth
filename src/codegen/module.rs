@@ -10,6 +10,7 @@ use llvm::analysis::LLVMVerifyFunction;
 use llvm::core::*;
 use llvm::prelude::*;
 use llvm::*;
+use llvm::target_machine::LLVMGetDefaultTargetTriple;
 use llvm_sys as llvm;
 
 use super::{code_block::CodeBlockCodeGen, Context, ToCStr};
@@ -22,10 +23,13 @@ impl<'a> ModuleCodeGen<'a> {
     pub fn new(functions: &'a HashMap<String, FunctionType>) -> Self {
         unsafe {
             let context = LLVMContextCreate();
+            let module = LLVMModuleCreateWithNameInContext("main_module\0".c_str(), context);
+            let target_triple = LLVMGetDefaultTargetTriple();
+            LLVMSetTarget(module, target_triple);
             Self {
                 context: Context {
                     llvm_context: context,
-                    module: LLVMModuleCreateWithNameInContext("main_module\0".c_str(), context),
+                    module,
                     builder: LLVMCreateBuilderInContext(context),
                     generated_functions: HashMap::new(),
                     functions,

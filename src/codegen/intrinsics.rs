@@ -64,6 +64,14 @@ pub(super) unsafe fn try_append_intrinsic(
             stack.pop().unwrap();
             true
         }
+        "(i)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::I32)),
+        "(ui)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::U32)),
+        "(q)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::I64)),
+        "(uq)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::U64)),
+        "(c)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::I8)),
+        "(uc)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::U8)),
+        "(f)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::F32)),
+        "(d)" => cast_intrinsic(context, stack, Type::Concrete(ConcreteType::F64)),
         // TODO implementh `nth` function for dereferenceing into an array. Need to keep reified
         // generic types around from the typechecking stage so we know what types are being indexed
         // (to generate correct getelementptr).
@@ -89,12 +97,82 @@ unsafe fn binop_intrinsic(
 
 unsafe fn icmp_intrinsic(
     predicate: LLVMIntPredicate,
-    value_stack: &mut CompilationStack,
+    stack: &mut CompilationStack,
     context: &mut Context,
 ) -> bool {
-    let rhs = value_stack.pop().unwrap();
-    let lhs = value_stack.pop().unwrap();
+    let rhs = stack.pop().unwrap();
+    let lhs = stack.pop().unwrap();
     let new = LLVMBuildICmp(context.builder, predicate, lhs.0, rhs.0, "\0".c_str());
-    value_stack.push((new, Type::Concrete(ConcreteType::Bool)));
+    stack.push((new, Type::Concrete(ConcreteType::Bool)));
     true
+}
+
+unsafe fn cast_intrinsic(context: &mut Context, stack: &mut CompilationStack, to: Type) -> bool {
+    let from = stack.pop().unwrap();
+    let opcode = get_cast_opcode(&from.1, &to);
+    if let Some(opcode) = opcode {
+        let casted = LLVMBuildCast(
+            context.builder,
+            opcode,
+            from.0,
+            context.get_llvm_type(&to),
+            "\0".c_str(),
+        );
+        stack.push((casted, to));
+    } else {
+        stack.push((from.0, to));
+    }
+    true
+}
+
+fn get_cast_opcode(from: &Type, to: &Type) -> Option<LLVMOpcode> {
+    match (from, to) {
+        (Type::Concrete(from), Type::Concrete(to)) => get_cast_opcode_concrete(from, to.clone()),
+        (Type::Concrete(_), Type::Pointer(_)) => todo!(),
+        (Type::Pointer(_), Type::Concrete(_)) => todo!(),
+        (Type::Pointer(_), Type::Pointer(_)) => todo!(),
+        (_, _) => panic!("Should not be any generics in codegen stage"),
+    }
+}
+
+// Casting opcodes for all concrete types
+// TODO check if these match the C semantics and if they make sense
+fn get_cast_opcode_concrete(from: &ConcreteType, to: ConcreteType) -> Option<LLVMOpcode> {
+    match (from.is_integral(), to.is_integral()) {
+        (true, true) => {
+            if from.width() == to.width() {
+                // same width int->int is always no-op
+                None
+            } else if from.width() < to.width() {
+                // extending int->int
+                Some(if from.is_signed() {
+                    LLVMOpcode::LLVMSExt
+                } else {
+                    LLVMOpcode::LLVMZExt
+                })
+            } else {
+                // truncating int->int
+                Some(LLVMOpcode::LLVMTrunc)
+            }
+        }
+        (true, false) => Some(if from.is_signed() {
+            LLVMOpcode::LLVMSIToFP
+        } else {
+            LLVMOpcode::LLVMUIToFP
+        }),
+        (false, true) => Some(if to.is_signed() {
+            LLVMOpcode::LLVMFPToSI
+        } else {
+            LLVMOpcode::LLVMFPToUI
+        }),
+        (false, false) => {
+            if from.width() == to.width() {
+                None
+            } else if from.width() < to.width() {
+                Some(LLVMOpcode::LLVMFPExt)
+            } else {
+                Some(LLVMOpcode::LLVMFPTrunc)
+            }
+        }
+    }
 }
