@@ -6,7 +6,8 @@ use std::collections::HashMap;
 
 use crate::ast::{
     visitor::{CodeBlockVisitor, ModuleVisitor},
-    ConcreteType, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type, WhileStatement,
+    ConcreteType, FunctionCall, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type,
+    WhileStatement,
 };
 
 pub struct FunctionMapBuilder {
@@ -24,7 +25,7 @@ impl FunctionMapBuilder {
 
 // TODO make sure implementation type matches declaration type
 impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
-    fn visit_decl(&mut self, function: &FunctionDecl) {
+    fn visit_decl(&mut self, function: &mut FunctionDecl) {
         if self.functions.contains_key(&function.head.name) {
             // TODO "previous declaration at X:X:X"
             panic!("Attempting to redeclare function {}", &function.head.name);
@@ -35,7 +36,7 @@ impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
         );
     }
 
-    fn visit_impl(&mut self, function: &FunctionImpl) {
+    fn visit_impl(&mut self, function: &mut FunctionImpl) {
         if self.functions.contains_key(&function.head.name) && self.functions[&function.head.name].1
         {
             // TODO "previous implementation at X:X:X"
@@ -152,8 +153,14 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
         self.type_stack.push(Type::Concrete(ConcreteType::Bool))
     }
 
-    fn visit_function(&mut self, name: &str) {
-        match self.function_map.get(name) {
+    fn visit_function(&mut self, function: &mut FunctionCall) {
+        // instantiate reified input/output vectors
+        function.reified_type = Some(FunctionType {
+            inputs: Vec::new(),
+            outputs: Vec::new(),
+        });
+
+        match self.function_map.get(&function.name) {
             Some(typ) => {
                 let mut generics_map = HashMap::new();
                 // Validate that the inputs to the function are on the stack
@@ -169,38 +176,54 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
                             panic!(
                                 "Expected a {:?} on the stack to pass to {}, but there was nothing on the stack", 
                                 input_type,
-                                name
+                                function.name
                             )
                         );
                     assert!(
                         input_type.matches(&top_type, &mut generics_map),
                         "Expected an {:?} on the stack to pass to {}, but got a {:?}",
                         input_type,
-                        name,
+                        function.name,
                         top_type
                     );
+
+                    // Annotate function with it's reified inputs.
+                    // Can safely unwrap because it has just been set above.
+                    // Insert at start of vec because we are iterating on the stack from right to
+                    // left (popping off the end of stack), but funtion IOs go from left to right
+                    // on the stack
+                    function
+                        .reified_type
+                        .as_mut()
+                        .unwrap()
+                        .inputs
+                        .insert(0, top_type.clone());
                 }
+                let reified_outputs = typ
+                    .outputs
+                    .iter()
+                    .map(|output_typ| output_typ.reify(&mut generics_map))
+                    .collect::<Vec<_>>();
+
                 // Push the function's output to the stack
-                self.type_stack.extend(
-                    typ.outputs
-                        .iter()
-                        .map(|output_typ| output_typ.reify(&mut generics_map)),
-                );
+                self.type_stack.extend(reified_outputs.to_vec());
+                // annotate function with it's reified outputs
+                function.reified_type.as_mut().unwrap().outputs = reified_outputs;
             }
-            None => panic!("undefined function {}", name),
+            None => panic!("undefined function {}", function.name),
         }
     }
 
-    fn visit_if_statement(&mut self, statement: &IfStatement) {
+    fn visit_if_statement(&mut self, statement: &mut IfStatement) {
         match self.type_stack.pop() {
             None => panic!("Expected a bool value for if statment, but stack was empty"),
             Some(Type::Concrete(ConcreteType::Bool)) => {}
             Some(typ) => panic!("Expected a bool value for if statement, got {:?}", typ),
         }
         let true_branch = CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
-            .walk(&statement.true_branch);
+            .walk(&mut statement.true_branch);
         let false_branch = CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
-            .walk(&statement.false_branch);
+            .walk(&mut statement.false_branch);
 
         assert!(
             true_branch == false_branch,
@@ -211,10 +234,10 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
         self.type_stack = true_branch;
     }
 
-    fn visit_while_statement(&mut self, statement: &WhileStatement) {
+    fn visit_while_statement(&mut self, statement: &mut WhileStatement) {
         let condition_block_result =
             CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
-                .walk(&statement.condition);
+                .walk(&mut statement.condition);
         let (effect_in, effect_out) =
             Self::get_stack_effect(&self.type_stack, &condition_block_result);
 
@@ -230,7 +253,7 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
         );
 
         let body_result = CodeBlockTypeChecker::new(self.type_stack.to_vec(), self.function_map)
-            .walk(&statement.body);
+            .walk(&mut statement.body);
         let (effect_in, effect_out) = Self::get_stack_effect(&self.type_stack, &body_result);
 
         assert!(
@@ -261,12 +284,12 @@ impl<'a> ModuleTypeChecker<'a> {
 }
 
 impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
-    fn visit_decl(&mut self, _: &FunctionDecl) {}
+    fn visit_decl(&mut self, _: &mut FunctionDecl) {}
 
-    fn visit_impl(&mut self, function: &FunctionImpl) {
+    fn visit_impl(&mut self, function: &mut FunctionImpl) {
         let return_stack =
             CodeBlockTypeChecker::new(function.head.typ.inputs.to_vec(), self.functions)
-                .walk(&function.body);
+                .walk(&mut function.body);
 
         assert!(
             return_stack == function.head.typ.outputs,

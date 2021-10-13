@@ -36,7 +36,7 @@ impl<'a> ModuleCodeGen<'a> {
 }
 
 impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
-    fn visit_decl(&mut self, function: &FunctionDecl) {
+    fn visit_decl(&mut self, function: &mut FunctionDecl) {
         if !function.is_intrinsic {
             unsafe {
                 self.context
@@ -45,7 +45,7 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
         }
     }
 
-    fn visit_impl(&mut self, function: &FunctionImpl) {
+    fn visit_impl(&mut self, function: &mut FunctionImpl) {
         unsafe {
             // If the function already exists in the generated functions, append to it.
             // This is the case if there was a forward declaration.
@@ -75,7 +75,7 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
             // The code block generation takes the function's parameters as it's initial stack
             let (mut output_stack, _) =
                 CodeBlockCodeGen::new(&mut self.context, generated_function.function_value, params, entry_bb)
-                    .walk(&function.body);
+                    .walk(&mut function.body);
 
             match function.head.typ.outputs.len() {
                 0 => LLVMBuildRetVoid(self.context.builder),

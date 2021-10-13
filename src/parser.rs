@@ -28,7 +28,12 @@ fn word_text(input: &str) -> PResult<String> {
 }
 
 fn word_function_call(input: &str) -> PResult<Word> {
-    map(word_text, Word::Function)(input)
+    map(word_text, |name| {
+        Word::FunctionCall(FunctionCall {
+            name,
+            reified_type: None,
+        })
+    })(input)
 }
 
 fn word_i32_literal(input: &str) -> PResult<Word> {

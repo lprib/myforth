@@ -9,9 +9,9 @@
         let mut program = String::from(include_str!("../../std.f"));
         program.push_str(input);
 
-        let module = module(&program).unwrap().1;
-        let functions = FunctionMapBuilder::new().walk(&module);
-        ModuleTypeChecker::new(&functions).walk(&module);
+        let mut module = module(&program).unwrap().1;
+        let functions = FunctionMapBuilder::new().walk(&mut module);
+        ModuleTypeChecker::new(&functions).walk(&mut module);
     }
 
     #[test]

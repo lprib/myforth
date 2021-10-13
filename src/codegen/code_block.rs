@@ -1,5 +1,5 @@
 use crate::ast::visitor::CodeBlockVisitor;
-use crate::ast::{ConcreteType, IfStatement, Type, WhileStatement};
+use crate::ast::{ConcreteType, FunctionCall, IfStatement, Type, WhileStatement};
 
 use llvm::core::*;
 use llvm::prelude::*;
@@ -66,10 +66,10 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
         }
     }
 
-    fn visit_function(&mut self, name: &str) {
+    fn visit_function(&mut self, function: &mut FunctionCall) {
         unsafe {
-            if !try_append_intrinsic(self.context, name, &mut self.value_stack) {
-                let call_type = &self.context.functions[name];
+            if !try_append_intrinsic(self.context, &function.name, &mut self.value_stack) {
+                let call_type = &self.context.functions[&function.name];
                 let mut args = Vec::new();
                 for _ in 0..call_type.inputs.len() {
                     args.push(self.value_stack.pop().unwrap());
@@ -77,7 +77,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
                 // let call_args = self.value_stack.pop
                 let result = LLVMBuildCall(
                     self.context.builder,
-                    self.context.generated_functions[name].function_value,
+                    self.context.generated_functions[&function.name].function_value,
                     args.as_mut_ptr(),
                     args.len() as u32,
                     "\0".c_str(),
@@ -102,7 +102,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
         }
     }
 
-    fn visit_if_statement(&mut self, statement: &IfStatement) {
+    fn visit_if_statement(&mut self, statement: &mut IfStatement) {
         unsafe {
             let predicate = self.value_stack.pop().unwrap();
 
@@ -133,7 +133,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
                 self.value_stack.to_vec(),
                 true_bb,
             )
-            .walk(&statement.true_branch);
+            .walk(&mut statement.true_branch);
             LLVMBuildBr(self.context.builder, end_bb);
 
             LLVMPositionBuilderAtEnd(self.context.builder, false_bb);
@@ -144,7 +144,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
                 self.value_stack.to_vec(),
                 false_bb,
             )
-            .walk(&statement.false_branch);
+            .walk(&mut statement.false_branch);
             LLVMBuildBr(self.context.builder, end_bb);
 
             LLVMPositionBuilderAtEnd(self.context.builder, end_bb);
@@ -174,7 +174,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
         }
     }
 
-    fn visit_while_statement(&mut self, statement: &WhileStatement) {
+    fn visit_while_statement(&mut self, statement: &mut WhileStatement) {
         unsafe {
             let condition_bb = LLVMAppendBasicBlockInContext(
                 self.context.llvm_context,
@@ -212,7 +212,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
                 condition_phis.to_vec(),
                 condition_bb,
             )
-            .walk(&statement.condition);
+            .walk(&mut statement.condition);
 
             LLVMPositionBuilderAtEnd(self.context.builder, condition_final_bb);
             LLVMBuildCondBr(
@@ -229,7 +229,7 @@ impl CodeBlockVisitor<(Vec<LLVMValueRef>, LLVMBasicBlockRef)> for CodeBlockCodeG
                 condition_output_stack,
                 body_bb,
             )
-            .walk(&statement.body);
+            .walk(&mut statement.body);
             LLVMBuildBr(self.context.builder, condition_bb);
 
             // Complete the phi nodes to merge branches from entry and loop body

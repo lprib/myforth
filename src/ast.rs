@@ -64,15 +64,21 @@ pub struct FunctionType {
 // AST:
 
 #[derive(Debug)]
-pub struct IfStatement<T = Word> {
-    pub true_branch: CodeBlock<T>,
-    pub false_branch: CodeBlock<T>,
+pub struct IfStatement {
+    pub true_branch: CodeBlock,
+    pub false_branch: CodeBlock,
 }
 
 #[derive(Debug)]
-pub struct WhileStatement<T = Word> {
-    pub condition: CodeBlock<T>,
-    pub body: CodeBlock<T>,
+pub struct WhileStatement {
+    pub condition: CodeBlock,
+    pub body: CodeBlock,
+}
+
+#[derive(Debug)]
+pub struct FunctionCall {
+    pub name: String,
+    pub reified_type: Option<FunctionType>,
 }
 
 #[derive(Debug)]
@@ -80,21 +86,13 @@ pub enum Word {
     I32Literal(i32),
     F32Literal(f32),
     BoolLiteral(bool),
-    Function(String),
-    IfStatement(IfStatement<Word>),
-    WhileStatement(WhileStatement<Word>),
-}
-
-// Equivalent of word in the ast, but represents types instead of values
-pub enum TypedWord {
-    Literal(Type),
-    Function(Vec<TypedWord>),
-    IfStatement(IfStatement<TypedWord>),
-    WhileStatement(WhileStatement<TypedWord>),
+    FunctionCall(FunctionCall),
+    IfStatement(IfStatement),
+    WhileStatement(WhileStatement),
 }
 
 #[derive(Debug)]
-pub struct CodeBlock<T = Word>(pub Vec<T>);
+pub struct CodeBlock(pub Vec<Word>);
 
 #[derive(Debug)]
 pub struct FunctionHeader {
@@ -110,15 +108,15 @@ pub struct FunctionDecl {
 }
 
 #[derive(Debug)]
-pub struct FunctionImpl<T = Word> {
+pub struct FunctionImpl {
     pub head: FunctionHeader,
-    pub body: CodeBlock<T>,
+    pub body: CodeBlock,
 }
 
 #[derive(Debug)]
-pub enum TopLevelItem<T = Word> {
+pub enum TopLevelItem {
     Decl(FunctionDecl),
-    Impl(FunctionImpl<T>),
+    Impl(FunctionImpl),
 }
 
 pub mod visitor {
@@ -128,10 +126,10 @@ pub mod visitor {
     where
         Self: Sized,
     {
-        fn visit_decl(&mut self, function: &FunctionDecl);
-        fn visit_impl(&mut self, function: &FunctionImpl);
+        fn visit_decl(&mut self, function: &mut FunctionDecl);
+        fn visit_impl(&mut self, function: &mut FunctionImpl);
         fn finalize(self) -> TOut;
-        fn walk(mut self, module: &[TopLevelItem]) -> TOut {
+        fn walk(mut self, module: &mut [TopLevelItem]) -> TOut {
             for top_level_item in module {
                 match top_level_item {
                     TopLevelItem::Decl(f_decl) => self.visit_decl(f_decl),
@@ -149,99 +147,27 @@ pub mod visitor {
         fn visit_i32_literal(&mut self, n: i32);
         fn visit_f32_literal(&mut self, n: f32);
         fn visit_bool_literal(&mut self, n: bool);
-        fn visit_function(&mut self, name: &str);
-        fn visit_if_statement(&mut self, statement: &IfStatement);
-        fn visit_while_statement(&mut self, statement: &WhileStatement);
+
+        // need to pass a mut ref to word here so that the typechecker can annotate the function
+        // with it's reified type signature.
+        fn visit_function(&mut self, function: &mut FunctionCall);
+        
+        // Any AST nodes which may contain function calls (eg. code blocks in if) must also be mut
+        // so the typechecker can annotate them
+        fn visit_if_statement(&mut self, statement: &mut IfStatement);
+        fn visit_while_statement(&mut self, statement: &mut WhileStatement);
         fn finalize(self) -> TOut;
-        fn walk(mut self, block: &CodeBlock) -> TOut {
-            for word in &block.0 {
+        fn walk(mut self, block: &mut CodeBlock) -> TOut {
+            for word in &mut block.0 {
                 match word {
                     Word::I32Literal(n) => self.visit_i32_literal(*n),
                     Word::F32Literal(n) => self.visit_f32_literal(*n),
                     Word::BoolLiteral(n) => self.visit_bool_literal(*n),
-                    Word::Function(s) => self.visit_function(s),
+                    Word::FunctionCall(function) => self.visit_function(function),
                     Word::IfStatement(if_statement) => self.visit_if_statement(if_statement),
                     Word::WhileStatement(while_statement) => {
                         self.visit_while_statement(while_statement)
                     }
-                }
-            }
-            self.finalize()
-        }
-    }
-
-    // walks module (Vec<Word>) and typed module (Vec<TypedWord>) at the same time. Both must be
-    // identical in structure, but with Word and TypedWord respectively
-    pub trait TypedModuleVisitor<TOut>
-    where
-        Self: Sized,
-    {
-        fn visit_decl(&mut self, function: FunctionDecl);
-        fn visit_impl(
-            &mut self,
-            function: FunctionImpl<Word>,
-            function_typed: FunctionImpl<TypedWord>,
-        );
-        fn finalize(self) -> TOut;
-        fn walk(
-            mut self,
-            module: Vec<TopLevelItem<Word>>,
-            typed_module: Vec<TopLevelItem<TypedWord>>,
-        ) -> TOut {
-            for (tli, tli_type) in module.into_iter().zip(typed_module.into_iter()) {
-                match (tli, tli_type) {
-                    (TopLevelItem::Decl(function), TopLevelItem::Decl(_)) => {
-                        self.visit_decl(function)
-                    }
-                    (TopLevelItem::Impl(function), TopLevelItem::Impl(typed_function)) => {
-                        self.visit_impl(function, typed_function)
-                    }
-                    (_, _) => panic!("value module does not match types module"),
-                }
-            }
-            self.finalize()
-        }
-    }
-
-    // Walks CodeBlock<Word> and CodeBlock<TypedWord> at the same time. Must be identical in
-    // structure, but with Word and TypedWord respectively
-    pub trait TypedCodeBlockVisitor<TOut>
-    where
-        Self: Sized,
-    {
-        fn visit_i32_literal(&mut self, n: i32, typ: Type);
-        fn visit_f32_literal(&mut self, n: f32, typ: Type);
-        fn visit_bool_literal(&mut self, n: bool, typ: Type);
-        fn visit_function(&mut self, name: String, typ: Vec<TypedWord>);
-        fn visit_if_statement(
-            &mut self,
-            statement: IfStatement<Word>,
-            statement_types: IfStatement<TypedWord>,
-        );
-        fn visit_while_statement(
-            &mut self,
-            statement: WhileStatement<Word>,
-            statement_type: WhileStatement<TypedWord>,
-        );
-        fn finalize(self) -> TOut;
-        fn walk(mut self, code: CodeBlock<Word>, types: CodeBlock<TypedWord>) -> TOut {
-            for (word, typed_word) in code.0.into_iter().zip(types.0.into_iter()) {
-                match (word, typed_word) {
-                    (Word::I32Literal(n), TypedWord::Literal(t)) => self.visit_i32_literal(n, t),
-                    (Word::F32Literal(n), TypedWord::Literal(t)) => self.visit_f32_literal(n, t),
-                    (Word::BoolLiteral(n), TypedWord::Literal(t)) => self.visit_bool_literal(n, t),
-                    (Word::Function(name), TypedWord::Function(outputs)) => {
-                        self.visit_function(name, outputs)
-                    }
-                    (
-                        Word::IfStatement(if_statement),
-                        TypedWord::IfStatement(typed_if_statment),
-                    ) => self.visit_if_statement(if_statement, typed_if_statment),
-                    (
-                        Word::WhileStatement(while_statement),
-                        TypedWord::WhileStatement(typed_while_statement),
-                    ) => self.visit_while_statement(while_statement, typed_while_statement),
-                    (_, _) => panic!("Value codeblock (CodeBlock<Word>) and type codeblock (CodeBlock<Type>) do not match")
                 }
             }
             self.finalize()

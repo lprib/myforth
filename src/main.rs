@@ -50,12 +50,15 @@ fn main() {
 
     main : fibs powersof2 ;
     ");
-    let module = module(test).unwrap().1;
+    let test = "a 'T 'U -> 'U; b -> f : t 4.0 a ;";
+    let mut module = module(test).unwrap().1;
 
-    let functions = FunctionMapBuilder::new().walk(&module);
+    let functions = FunctionMapBuilder::new().walk(&mut module);
 
-    ModuleTypeChecker::new(&functions).walk(&module);
-    let module_ir = ModuleCodeGen::new(&functions).walk(&module);
+    println!("BEFORE_AST: {:#?}", &module);
+    ModuleTypeChecker::new(&functions).walk(&mut module);
+    println!("AFTER_AST: {:#?}", &module);
+    let module_ir = ModuleCodeGen::new(&functions).walk(&mut module);
     run_ir(&module_ir);
 }
 
