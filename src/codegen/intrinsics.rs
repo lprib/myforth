@@ -1,3 +1,4 @@
+use std::cmp::Ordering;
 use std::os::raw::c_char;
 
 use llvm::core::*;
@@ -90,7 +91,12 @@ unsafe fn binop_intrinsic(
 ) -> bool {
     let rhs = stack.pop().unwrap();
     let lhs = stack.pop().unwrap();
-    let new = f(context.builder, lhs.llvm_value, rhs.llvm_value, "\0".c_str());
+    let new = f(
+        context.builder,
+        lhs.llvm_value,
+        rhs.llvm_value,
+        "\0".c_str(),
+    );
     // ASSUMPTION: binops always have the type 'T 'T -> 'T
     stack.push(CompilationStackValue {
         llvm_value: new,
@@ -106,7 +112,13 @@ unsafe fn icmp_intrinsic(
 ) -> bool {
     let rhs = stack.pop().unwrap();
     let lhs = stack.pop().unwrap();
-    let new = LLVMBuildICmp(context.builder, predicate, lhs.llvm_value, rhs.llvm_value, "\0".c_str());
+    let new = LLVMBuildICmp(
+        context.builder,
+        predicate,
+        lhs.llvm_value,
+        rhs.llvm_value,
+        "\0".c_str(),
+    );
     stack.push(CompilationStackValue {
         llvm_value: new,
         typ: Type::Concrete(ConcreteType::Bool),
@@ -152,22 +164,15 @@ fn get_cast_opcode(from: &Type, to: &Type) -> Option<LLVMOpcode> {
 // TODO check if these match the C semantics and if they make sense
 fn get_cast_opcode_concrete(from: &ConcreteType, to: ConcreteType) -> Option<LLVMOpcode> {
     match (from.is_integral(), to.is_integral()) {
-        (true, true) => {
-            if from.width() == to.width() {
-                // same width int->int is always no-op
-                None
-            } else if from.width() < to.width() {
-                // extending int->int
-                Some(if from.is_signed() {
-                    LLVMOpcode::LLVMSExt
-                } else {
-                    LLVMOpcode::LLVMZExt
-                })
+        (true, true) => match from.width().cmp(&to.width()) {
+            Ordering::Equal => None,
+            Ordering::Less => Some(if from.is_signed() {
+                LLVMOpcode::LLVMSExt
             } else {
-                // truncating int->int
-                Some(LLVMOpcode::LLVMTrunc)
-            }
-        }
+                LLVMOpcode::LLVMZExt
+            }),
+            Ordering::Greater => Some(LLVMOpcode::LLVMTrunc),
+        },
         (true, false) => Some(if from.is_signed() {
             LLVMOpcode::LLVMSIToFP
         } else {
@@ -178,14 +183,10 @@ fn get_cast_opcode_concrete(from: &ConcreteType, to: ConcreteType) -> Option<LLV
         } else {
             LLVMOpcode::LLVMFPToUI
         }),
-        (false, false) => {
-            if from.width() == to.width() {
-                None
-            } else if from.width() < to.width() {
-                Some(LLVMOpcode::LLVMFPExt)
-            } else {
-                Some(LLVMOpcode::LLVMFPTrunc)
-            }
-        }
+        (false, false) => match from.width().cmp(&to.width()) {
+            Ordering::Equal => None,
+            Ordering::Less => Some(LLVMOpcode::LLVMFPExt),
+            Ordering::Greater => Some(LLVMOpcode::LLVMFPTrunc),
+        },
     }
 }
