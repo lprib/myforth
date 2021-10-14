@@ -17,7 +17,7 @@ fn main() {
         "
     extern putchar i -> ;
     extern getchar -> i;
-    extern main -> ;
+    extern main ;
 
     print i -> :
         dup 9 > ?
@@ -52,6 +52,7 @@ fn main() {
     ;
 
     main : powersof2 ;
+
     "
     );
     let mut module = module(test).unwrap().1;

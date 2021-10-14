@@ -12,9 +12,14 @@ use llvm::prelude::*;
 use llvm::*;
 use llvm_sys as llvm;
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct CompilationStackValue {
+    llvm_value: LLVMValueRef,
+    typ: Type
+}
 // Holds the current stack of LLVM values and their reified types (used for
 // monomorphization of generics)
-type CompilationStack = Vec<(LLVMValueRef, Type)>;
+type CompilationStack = Vec<CompilationStackValue>;
 
 #[derive(Clone, Copy)]
 pub(super) struct GeneratedFunction {

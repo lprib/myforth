@@ -5,12 +5,13 @@ use std::ptr;
 use crate::ast::visitor::CodeBlockVisitor;
 use crate::ast::{visitor::ModuleVisitor, FunctionType};
 use crate::ast::{FunctionDecl, FunctionImpl};
+use crate::codegen::CompilationStackValue;
 
 use llvm::analysis::LLVMVerifyFunction;
 use llvm::core::*;
 use llvm::prelude::*;
-use llvm::*;
 use llvm::target_machine::LLVMGetDefaultTargetTriple;
+use llvm::*;
 use llvm_sys as llvm;
 
 use super::{code_block::CodeBlockCodeGen, Context, ToCStr};
@@ -78,6 +79,10 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
             let params = params
                 .into_iter()
                 .zip(function.head.typ.inputs.iter().cloned())
+                .map(|(value, annotated_type)| CompilationStackValue {
+                    llvm_value: value,
+                    typ: annotated_type,
+                })
                 .collect();
 
             // Generate the body of the function as a CodeBlock:
@@ -94,7 +99,7 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
                 0 => LLVMBuildRetVoid(self.context.builder),
 
                 // If only a single return, we can just return the value directly
-                1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap().0),
+                1 => LLVMBuildRet(self.context.builder, output_stack.pop().unwrap().llvm_value),
 
                 // If multiple returns, must pack all returned stack items into a struct
                 _ => {
@@ -106,14 +111,14 @@ impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
                     );
 
                     // Create a GEP and store instruction for each return value
-                    for (i, output_val) in output_stack.into_iter().enumerate() {
+                    for (i, output_stackval) in output_stack.into_iter().enumerate() {
                         let output_ptr = LLVMBuildStructGEP(
                             self.context.builder,
                             return_alloca,
                             i as u32,
                             "return_value_ptr\0".c_str(),
                         );
-                        LLVMBuildStore(self.context.builder, output_val.0, output_ptr);
+                        LLVMBuildStore(self.context.builder, output_stackval.llvm_value, output_ptr);
                     }
                     // Load the populated return structure into a value
                     let return_struct = LLVMBuildLoad(

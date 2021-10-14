@@ -6,7 +6,7 @@ use llvm::prelude::*;
 use llvm_sys as llvm;
 
 use super::intrinsics::try_append_intrinsic;
-use super::{CompilationStack, Context, ToCStr};
+use super::{CompilationStack, CompilationStackValue, Context, ToCStr};
 
 pub(super) struct CodeBlockCodeGen<'a, 'b> {
     context: &'a mut Context<'b>,
@@ -45,39 +45,39 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
     fn visit_i32_literal(&mut self, n: i32) {
         unsafe {
             let typ = Type::Concrete(ConcreteType::I32);
-            self.stack.push((
-                LLVMConstInt(
+            self.stack.push(CompilationStackValue {
+                llvm_value: LLVMConstInt(
                     self.context.get_llvm_type(&typ),
                     // TODO negatives will be broken here:
                     n as u64,
                     false as LLVMBool,
                 ),
                 typ,
-            ))
+            })
         }
     }
 
     fn visit_f32_literal(&mut self, n: f32) {
         unsafe {
             let typ = Type::Concrete(ConcreteType::F32);
-            self.stack.push((
-                LLVMConstReal(self.context.get_llvm_type(&typ), n as f64),
+            self.stack.push(CompilationStackValue {
+                llvm_value: LLVMConstReal(self.context.get_llvm_type(&typ), n as f64),
                 typ,
-            ));
+            });
         }
     }
 
     fn visit_bool_literal(&mut self, n: bool) {
         unsafe {
             let typ = Type::Concrete(ConcreteType::Bool);
-            self.stack.push((
-                LLVMConstInt(
+            self.stack.push(CompilationStackValue {
+                llvm_value: LLVMConstInt(
                     self.context.get_llvm_type(&typ),
                     if n { 1 } else { 0 },
                     false as LLVMBool,
                 ),
                 typ,
-            ));
+            });
         }
     }
 
@@ -88,7 +88,7 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
                 let mut args = Vec::new();
                 // Pop the required number of arguments off the compilation stack
                 for _ in 0..call_type.inputs.len() {
-                    args.push(self.stack.pop().unwrap().0);
+                    args.push(self.stack.pop().unwrap().llvm_value);
                 }
 
                 // generate function call
@@ -103,10 +103,10 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
                 match call_type.outputs.len() {
                     0 => {}
                     // If single return, we just need to push the return value to stack
-                    1 => self.stack.push((
-                        result,
-                        function.reified_type.as_ref().unwrap().outputs[0].clone(),
-                    )),
+                    1 => self.stack.push(CompilationStackValue {
+                        llvm_value: result,
+                        typ: function.reified_type.as_ref().unwrap().outputs[0].clone(),
+                    }),
                     // if multiple return, we need to unpack the return values from the return
                     // struct and push them to the stack individually
                     _ => {
@@ -117,10 +117,11 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
                                 i as u32,
                                 "\0".c_str(),
                             );
-                            self.stack.push((
-                                ret_extracted,
-                                function.reified_type.as_ref().unwrap().outputs[i].clone(),
-                            ));
+                            self.stack.push(CompilationStackValue {
+                                llvm_value: ret_extracted,
+                                typ: function.reified_type.as_ref().unwrap().outputs[i]
+                                    .clone(),
+                            });
                         }
                     }
                 }
@@ -130,7 +131,7 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
 
     fn visit_if_statement(&mut self, statement: &mut IfStatement) {
         unsafe {
-            let predicate = self.stack.pop().unwrap().0;
+            let predicate = self.stack.pop().unwrap().llvm_value;
 
             let true_bb = LLVMAppendBasicBlockInContext(
                 self.context.llvm_context,
@@ -191,11 +192,14 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
 
                     // typechecking ensures that true_stackval and false_stackval will have the
                     // same type, so we only need to get the type of the true branch's value
-                    let output_type = self.context.get_llvm_type(&true_stackval.1);
+                    let output_type = self.context.get_llvm_type(&true_stackval.typ);
                     let phi = LLVMBuildPhi(self.context.builder, output_type, "\0".c_str());
-                    LLVMAddIncoming(phi, &mut true_stackval.0, &mut true_final_bb, 1);
-                    LLVMAddIncoming(phi, &mut false_stackval.0, &mut false_final_bb, 1);
-                    output_stack.push((phi, true_stackval.1));
+                    LLVMAddIncoming(phi, &mut true_stackval.llvm_value, &mut true_final_bb, 1);
+                    LLVMAddIncoming(phi, &mut false_stackval.llvm_value, &mut false_final_bb, 1);
+                    output_stack.push(CompilationStackValue {
+                        llvm_value: phi,
+                        typ: true_stackval.typ,
+                    });
                 }
             }
             self.final_bb = end_bb;
@@ -231,15 +235,18 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
             for mut entry_stackval in self.stack.drain(..) {
                 let phi = LLVMBuildPhi(
                     self.context.builder,
-                    self.context.get_llvm_type(&entry_stackval.1),
+                    self.context.get_llvm_type(&entry_stackval.typ),
                     "while_phi\0".c_str(),
                 );
 
                 // Since the body has not been compiled yet, we dont know what the incoming values
                 // from it will be yet. Only add the incoming values from the entry of the loop
                 // here.
-                LLVMAddIncoming(phi, &mut entry_stackval.0, &mut self.final_bb, 1);
-                condition_phis.push((phi, entry_stackval.1));
+                LLVMAddIncoming(phi, &mut entry_stackval.llvm_value, &mut self.final_bb, 1);
+                condition_phis.push(CompilationStackValue {
+                    llvm_value: phi,
+                    typ: entry_stackval.typ,
+                });
             }
 
             let (mut condition_output_stack, condition_final_bb) = CodeBlockCodeGen::new(
@@ -254,7 +261,7 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
             // if condition is false, goto end, else goto body
             LLVMBuildCondBr(
                 self.context.builder,
-                condition_output_stack.pop().unwrap().0,
+                condition_output_stack.pop().unwrap().llvm_value,
                 body_bb,
                 end_bb,
             );
@@ -274,7 +281,7 @@ impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGe
             // Complete the PHI nodes created above, since we now know the stack output of the body.
             for (phi, body_stackval) in condition_phis.iter_mut().zip(body_output_stack.iter_mut())
             {
-                LLVMAddIncoming((*phi).0, &mut body_stackval.0, &mut body_final_bb, 1);
+                LLVMAddIncoming((*phi).llvm_value, &mut body_stackval.llvm_value, &mut body_final_bb, 1);
             }
 
             LLVMPositionBuilderAtEnd(self.context.builder, end_bb);

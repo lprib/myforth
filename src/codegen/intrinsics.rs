@@ -9,12 +9,13 @@ use crate::ast::ConcreteType;
 use crate::ast::Type;
 
 use super::CompilationStack;
+use super::CompilationStackValue;
 use super::{Context, ToCStr};
 
 pub(super) unsafe fn try_append_intrinsic(
     context: &mut Context,
     name: &str,
-    stack: &mut Vec<(LLVMValueRef, Type)>,
+    stack: &mut Vec<CompilationStackValue>,
 ) -> bool {
     match name {
         "+" => binop_intrinsic(LLVMBuildAdd, stack, context),
@@ -89,9 +90,12 @@ unsafe fn binop_intrinsic(
 ) -> bool {
     let rhs = stack.pop().unwrap();
     let lhs = stack.pop().unwrap();
-    let new = f(context.builder, lhs.0, rhs.0, "\0".c_str());
+    let new = f(context.builder, lhs.llvm_value, rhs.llvm_value, "\0".c_str());
     // ASSUMPTION: binops always have the type 'T 'T -> 'T
-    stack.push((new, rhs.1));
+    stack.push(CompilationStackValue {
+        llvm_value: new,
+        typ: rhs.typ,
+    });
     true
 }
 
@@ -102,25 +106,34 @@ unsafe fn icmp_intrinsic(
 ) -> bool {
     let rhs = stack.pop().unwrap();
     let lhs = stack.pop().unwrap();
-    let new = LLVMBuildICmp(context.builder, predicate, lhs.0, rhs.0, "\0".c_str());
-    stack.push((new, Type::Concrete(ConcreteType::Bool)));
+    let new = LLVMBuildICmp(context.builder, predicate, lhs.llvm_value, rhs.llvm_value, "\0".c_str());
+    stack.push(CompilationStackValue {
+        llvm_value: new,
+        typ: Type::Concrete(ConcreteType::Bool),
+    });
     true
 }
 
 unsafe fn cast_intrinsic(context: &mut Context, stack: &mut CompilationStack, to: Type) -> bool {
     let from = stack.pop().unwrap();
-    let opcode = get_cast_opcode(&from.1, &to);
+    let opcode = get_cast_opcode(&from.typ, &to);
     if let Some(opcode) = opcode {
         let casted = LLVMBuildCast(
             context.builder,
             opcode,
-            from.0,
+            from.llvm_value,
             context.get_llvm_type(&to),
             "\0".c_str(),
         );
-        stack.push((casted, to));
+        stack.push(CompilationStackValue {
+            llvm_value: casted,
+            typ: to,
+        });
     } else {
-        stack.push((from.0, to));
+        stack.push(CompilationStackValue {
+            llvm_value: from.llvm_value,
+            typ: to,
+        });
     }
     true
 }
