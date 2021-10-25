@@ -15,28 +15,18 @@ fn main() {
     let test = concat!(
         include_str!("../std.f"),
         "
-    extern putchar i -> ;
     extern getchar -> i;
-    extern main ;
+    extern main;
 
-    print i -> :
-        dup 9 > ?
-            dup 10 / dup 10 * rot swap - swap print
-        : ;
-        48 + putchar
-    ;
-
-    nl : 10 putchar ;
-    inc i -> i : 1 + ;
-    dec i -> i : 1 - ;
+    pow2 i->i: 1 swap << ;
 
     powersof2 :
         1 @ dup 30 < :
-            dup 1 swap << print nl
+            dup pow2 iprintln
             inc
         ;
         @ dup 1 > :
-            dup 1 swap << print nl
+            dup pow2 iprintln
             dec
         ; drop
     ;
@@ -48,10 +38,15 @@ fn main() {
     ;
     
     fibs:
-        0 @ dup 20 < : dup fib print nl 1 + ; drop
+        0 @ dup 20 <= :
+            dup iprint
+            32 putchar
+            dup fib iprintln
+            inc
+        ; drop
     ;
 
-    main : powersof2 ;
+    main : fibs ;
 
     "
     );
@@ -59,9 +54,7 @@ fn main() {
 
     let functions = FunctionMapBuilder::new().walk(&mut module);
 
-    // println!("BEFORE_AST: {:#?}", &module);
     ModuleTypeChecker::new(&functions).walk(&mut module);
-    println!("AFTER_AST: {:#?}", &module);
     let module_ir = ModuleCodeGen::new(&functions).walk(&mut module);
     run_ir(&module_ir);
 }

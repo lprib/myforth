@@ -15,6 +15,7 @@ use llvm_sys as llvm;
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct CompilationStackValue {
     llvm_value: LLVMValueRef,
+    // TODO take reference to type here, which points into the module's types, avoiding clones
     typ: Type
 }
 // Holds the current stack of LLVM values and their reified types (used for

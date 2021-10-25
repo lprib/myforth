@@ -297,7 +297,6 @@ impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
             function.head.typ.outputs,
             return_stack
         );
-        println!("Function {} typechecked OK.", function.head.name);
     }
 
     fn finalize(self) {}

@@ -31,3 +31,20 @@ intrinsic (c) 'T -> c;
 intrinsic (uc) 'T -> uc;
 intrinsic (f) 'T -> f;
 intrinsic (d) 'T -> d;
+
+inc i -> i : 1 + ;
+dec i -> i : 1 - ;
+
+[TODO this should only be linked with stdio.f]
+extern putchar i -> ;
+
+nl : 10 putchar ;
+
+iprint i -> :
+    dup 9 > ?
+        dup 10 / dup 10 * rot swap - swap iprint
+    : ;
+    48 + putchar
+;
+
+iprintln i-> : iprint nl ;
