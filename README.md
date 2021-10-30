@@ -88,3 +88,53 @@ doubleToIntAndIncrement f f -> i i : (i) 1 + swap (i) 5 + swap ;
     - Everyone keeps references to the types created in typechecking/parsing
 - [ ] CodeGen panics if functions reference functions that haven't been generated yet
     - Are stubs being generated properly?
+
+## Sytax wishlist
+### records
+```
+record my-struct :
+    foo i ,
+    bar i ,
+    other b ,
+;
+
+a my-struct -> i :
+    my-struct .foo 1 +
+;
+```
+
+This requires refactoring the cast operator to not be a function but '(' .. type .. ')'
+```
+get_ptr my-struct -> i :
+    my-struct (*my-struct) (i)
+```
+
+Should casts always succeed? how does casting my-struct to other-struct work? Only cast integer and pointer types.
+
+*my-struct -> *other-struct should succeed but can access out-of-bounds memory.
+
+### More literals
+- Hex: `0xFF -> i`
+- Bin: `0b1010 -> i`
+- CStrings `"foo" -> *c`
+    - Allocate in writable memory section
+- characters `'a' -> c`
+- Untyped integers? eg passing 123 to a `i -> 'T` will coerce 123 to i, but passing to `uq -> 'T` will coerce to uq
+
+### If-elseif
+Currently:
+```
+dup input test-1 ?
+    branch1
+    :
+dup input test-2 ?
+    branch2
+    :
+dup input test-1 ?
+    branch3
+  :
+    else-branch
+;
+;
+; [note many end blocks]
+```

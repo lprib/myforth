@@ -126,42 +126,68 @@ pub enum TopLevelItem {
 pub mod visitor {
     use super::*;
 
-    pub trait ModuleVisitor<TOut>
+    pub trait ModuleVisitor
     where
         Self: Sized,
     {
-        fn visit_decl(&mut self, function: &mut FunctionDecl);
-        fn visit_impl(&mut self, function: &mut FunctionImpl);
-        fn finalize(self) -> TOut;
-        fn walk(mut self, module: &mut [TopLevelItem]) -> TOut {
+        type ItemResult;
+        type FinalOutput;
+
+        fn visit_decl(&mut self, function: &mut FunctionDecl) -> Self::ItemResult;
+        fn visit_impl(&mut self, function: &mut FunctionImpl) -> Self::ItemResult;
+        fn finalize(self) -> Self::FinalOutput;
+        fn walk(mut self, module: &mut [TopLevelItem]) -> Self::FinalOutput {
             for top_level_item in module {
                 match top_level_item {
                     TopLevelItem::Decl(f_decl) => self.visit_decl(f_decl),
                     TopLevelItem::Impl(f_impl) => self.visit_impl(f_impl),
-                }
+                };
             }
             self.finalize()
         }
     }
 
-    pub trait CodeBlockVisitor<TOut>
+    pub trait ResultModuleVisitor
+    where
+        Self: ModuleVisitor<ItemResult = Result<(), Self::ErrorType>>,
+    {
+        type ErrorType;
+
+        fn walk_result(
+            mut self,
+            module: &mut [TopLevelItem],
+        ) -> Result<Self::FinalOutput, Self::ErrorType> {
+            for top_level_item in module {
+                match top_level_item {
+                    TopLevelItem::Decl(f_decl) => self.visit_decl(f_decl)?,
+                    TopLevelItem::Impl(f_impl) => self.visit_impl(f_impl)?,
+                };
+            }
+            Ok(self.finalize())
+        }
+    }
+
+    pub trait CodeBlockVisitor
     where
         Self: Sized,
     {
-        fn visit_i32_literal(&mut self, n: i32);
-        fn visit_f32_literal(&mut self, n: f32);
-        fn visit_bool_literal(&mut self, n: bool);
+        type ItemResult;
+        type FinalOutput;
+
+        fn visit_i32_literal(&mut self, n: i32) -> Self::ItemResult;
+        fn visit_f32_literal(&mut self, n: f32) -> Self::ItemResult;
+        fn visit_bool_literal(&mut self, n: bool) -> Self::ItemResult;
 
         // need to pass a mut ref to word here so that the typechecker can annotate the function
         // with it's reified type signature.
-        fn visit_function(&mut self, function: &mut FunctionCall);
-        
+        fn visit_function(&mut self, function: &mut FunctionCall) -> Self::ItemResult;
+
         // Any AST nodes which may contain function calls (eg. code blocks in if) must also be mut
         // so the typechecker can annotate them
-        fn visit_if_statement(&mut self, statement: &mut IfStatement);
-        fn visit_while_statement(&mut self, statement: &mut WhileStatement);
-        fn finalize(self) -> TOut;
-        fn walk(mut self, block: &mut CodeBlock) -> TOut {
+        fn visit_if_statement(&mut self, statement: &mut IfStatement) -> Self::ItemResult;
+        fn visit_while_statement(&mut self, statement: &mut WhileStatement) -> Self::ItemResult;
+        fn finalize(self) -> Self::FinalOutput;
+        fn walk(mut self, block: &mut CodeBlock) -> Self::FinalOutput {
             for word in &mut block.0 {
                 match word {
                     Word::I32Literal(n) => self.visit_i32_literal(*n),
@@ -172,9 +198,31 @@ pub mod visitor {
                     Word::WhileStatement(while_statement) => {
                         self.visit_while_statement(while_statement)
                     }
-                }
+                };
             }
             self.finalize()
+        }
+    }
+
+    pub trait ResultCodeBlockvisitor
+    where
+        Self: CodeBlockVisitor<ItemResult = Result<(), Self::ErrorType>>,
+    {
+        type ErrorType;
+        fn walk_result(mut self, block: &mut CodeBlock) -> Result<Self::FinalOutput, Self::ErrorType> {
+            for word in &mut block.0 {
+                match word {
+                    Word::I32Literal(n) => self.visit_i32_literal(*n)?,
+                    Word::F32Literal(n) => self.visit_f32_literal(*n)?,
+                    Word::BoolLiteral(n) => self.visit_bool_literal(*n)?,
+                    Word::FunctionCall(function) => self.visit_function(function)?,
+                    Word::IfStatement(if_statement) => self.visit_if_statement(if_statement)?,
+                    Word::WhileStatement(while_statement) => {
+                        self.visit_while_statement(while_statement)?
+                    }
+                };
+            }
+            Ok(self.finalize())
         }
     }
 }

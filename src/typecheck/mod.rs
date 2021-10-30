@@ -5,7 +5,7 @@ use core::panic;
 use std::collections::HashMap;
 
 use crate::ast::{
-    visitor::{CodeBlockVisitor, ModuleVisitor},
+    visitor::{CodeBlockVisitor, ModuleVisitor, ResultModuleVisitor},
     ConcreteType, FunctionCall, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type,
     WhileStatement,
 };
@@ -24,7 +24,10 @@ impl FunctionMapBuilder {
 }
 
 // TODO make sure implementation type matches declaration type
-impl ModuleVisitor<HashMap<String, FunctionType>> for FunctionMapBuilder {
+impl ModuleVisitor for FunctionMapBuilder {
+    type ItemResult = ();
+    type FinalOutput = HashMap<String, FunctionType>;
+
     fn visit_decl(&mut self, function: &mut FunctionDecl) {
         if self.functions.contains_key(&function.head.name) {
             // TODO "previous declaration at X:X:X"
@@ -110,6 +113,11 @@ impl Type {
     }
 }
 
+// enum TypeCheckError<'a> {
+//     UndefinedGeneric(String),
+//     EmptyStack{expected: }
+// }
+
 struct CodeBlockTypeChecker<'a> {
     function_map: &'a HashMap<String, FunctionType>,
     type_stack: Vec<Type>,
@@ -139,7 +147,10 @@ impl<'a> CodeBlockTypeChecker<'a> {
     }
 }
 
-impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
+impl CodeBlockVisitor for CodeBlockTypeChecker<'_> {
+    type ItemResult = ();
+    type FinalOutput = Vec<Type>;
+
     fn visit_i32_literal(&mut self, _: i32) {
         self.type_stack.push(Type::Concrete(ConcreteType::I32))
     }
@@ -268,7 +279,7 @@ impl CodeBlockVisitor<Vec<Type>> for CodeBlockTypeChecker<'_> {
         );
     }
 
-    fn finalize(self) -> Vec<Type> {
+    fn finalize(self) -> Self::FinalOutput {
         self.type_stack
     }
 }
@@ -283,7 +294,10 @@ impl<'a> ModuleTypeChecker<'a> {
     }
 }
 
-impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
+impl ModuleVisitor for ModuleTypeChecker<'_> {
+    type ItemResult = ();
+    type FinalOutput = ();
+
     fn visit_decl(&mut self, _: &mut FunctionDecl) {}
 
     fn visit_impl(&mut self, function: &mut FunctionImpl) {
@@ -301,3 +315,7 @@ impl ModuleVisitor<()> for ModuleTypeChecker<'_> {
 
     fn finalize(self) {}
 }
+
+// impl ResultModuleVisitor for ModuleTypeChecker<'_> {
+//     type ErrorType = ();
+// }

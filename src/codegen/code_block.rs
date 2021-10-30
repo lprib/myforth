@@ -41,7 +41,10 @@ impl<'a, 'b> CodeBlockCodeGen<'a, 'b> {
 }
 
 // finalize returns (stack, final BasicBlock)
-impl CodeBlockVisitor<(CompilationStack, LLVMBasicBlockRef)> for CodeBlockCodeGen<'_, '_> {
+impl CodeBlockVisitor for CodeBlockCodeGen<'_, '_> {
+    type ItemResult = ();
+    type FinalOutput = (CompilationStack, LLVMBasicBlockRef);
+
     fn visit_i32_literal(&mut self, n: i32) {
         unsafe {
             let typ = Type::Concrete(ConcreteType::I32);

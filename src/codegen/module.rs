@@ -40,7 +40,10 @@ impl<'a> ModuleCodeGen<'a> {
     }
 }
 
-impl<'a> ModuleVisitor<String> for ModuleCodeGen<'a> {
+impl<'a> ModuleVisitor for ModuleCodeGen<'a> {
+    type ItemResult = ();
+    type FinalOutput = String;
+
     fn visit_decl(&mut self, function: &mut FunctionDecl) {
         if !function.is_intrinsic {
             unsafe {
