@@ -6,6 +6,10 @@ intrinsic over 'T 'U -> 'T 'U 'T;
 intrinsic swap 'T 'U -> 'U 'T;
 intrinsic rot 'T 'U 'V -> 'U 'V 'T;
 
+[TODO fix]
+[nip 'T 'U -> 'U : swap drop ;]
+[tuck 'T 'U -> 'U 'T 'U : swap over ;]
+
 [math]
 intrinsic + i i -> i;
 intrinsic - i i -> i;

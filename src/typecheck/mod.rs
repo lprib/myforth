@@ -5,7 +5,7 @@ use core::panic;
 use std::collections::HashMap;
 
 use crate::ast::{
-    visitor::{CodeBlockVisitor, ModuleVisitor, ResultModuleVisitor},
+    visitor::{CodeBlockVisitor, ModuleVisitor},
     ConcreteType, FunctionCall, FunctionDecl, FunctionImpl, FunctionType, IfStatement, Type,
     WhileStatement,
 };
